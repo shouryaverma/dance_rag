@@ -167,14 +167,11 @@ class LitTrainModel(pl.LightningModule):
                                inner_iter=batch_idx,
                                lr=self.trainer.optimizers[0].param_groups[0]['lr'])
 
-
-
     def on_train_epoch_end(self):
         # pass
         sch = self.lr_schedulers()
         if sch is not None:
             sch.step()
-
 
     def save(self, file_name):
         state = {}
@@ -185,14 +182,12 @@ class LitTrainModel(pl.LightningModule):
         torch.save(state, file_name, _use_new_zipfile_serialization=False)
         return
 
-
 def build_models(cfg):
     if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
     else:
         raise NotImplementedError
     return model
-
 
 import argparse
 if __name__ == '__main__':

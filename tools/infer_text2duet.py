@@ -127,12 +127,8 @@ class LitGenModel(pl.LightningModule):
         self.sample_text(batch, batch_idx, 'test')
 
 def build_models(cfg):
-    if cfg.NAME == "InterGen":
-        model = InterGen(cfg)
-    elif cfg.NAME == "DuetModel":
+    if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
-    elif cfg.NAME == "MDMModel":
-        model = DuetModelMDM(cfg)
     else:
         raise NotImplementedError
     return model
