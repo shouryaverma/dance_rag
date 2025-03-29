@@ -219,15 +219,27 @@ class InterFlowMatching_Duet(nn.Module):
             activation=self.activation
         )
         
-        # Loss weights with validation
-        self.fm_weight = max(0.1, min(10.0, getattr(cfg, 'FM_WEIGHT', 1.0)))
+        # Create the loss weights dictionary
+        self.loss_weights = {}
+        self.loss_weights["FM"] = getattr(cfg, 'FM_WEIGHT', 1.0)
+        self.loss_weights["RO"] = getattr(cfg, 'RO_WEIGHT', 0.01)
+        self.loss_weights["JA"] = getattr(cfg, 'JA_WEIGHT', 3.0)
+        self.loss_weights["DM"] = getattr(cfg, 'DM_WEIGHT', 3.0)
+        self.loss_weights["VEL"] = getattr(cfg, 'VEL_WEIGHT', 30.0)
+        self.loss_weights["BL"] = getattr(cfg, 'BL_WEIGHT', 10.0)
+        self.loss_weights["FC"] = getattr(cfg, 'FC_WEIGHT', 30.0)
+        self.loss_weights["POSE"] = getattr(cfg, 'POSE_WEIGHT', 1.0)
+        self.loss_weights["TR"] = getattr(cfg, 'TR_WEIGHT', 100.0)
+        
+        # Normalizer for converting between representations
+        self.normalizer = MotionNormalizerTorch()
         
         # Precompute masks for common sequence lengths
         self._mask_cache = {}
     
     def compute_loss(self, batch):
         """
-        Compute flow matching training loss with improved stability.
+        Compute flow matching and geometric losses for training.
         
         Args:
             batch: Dictionary containing:
@@ -256,6 +268,7 @@ class InterFlowMatching_Duet(nn.Module):
         
         # Compute flow matching loss with gradient tracking for backprop
         try:
+            # Get flow matching results
             flow_results = self.flow_engine.loss_fn(
                 model=self.flow_predictor,
                 x_0=x_0,
@@ -265,24 +278,78 @@ class InterFlowMatching_Duet(nn.Module):
                 music=batch["music"]
             )
             
-            # Extract main loss
+            # Extract the flow matching loss
             fm_loss = flow_results["loss"]
             
+            # Extract prediction and target for additional losses
+            prediction = flow_results["pred"]  # [B, T, 2, D]
+            target = flow_results["target"]    # [B, T, 2, D]
+            t = flow_results["t"]              # [B]
+            
+            # Reshape mask for loss computation
+            mask_reshaped = seq_mask.reshape(B, T, -1, 1)
+            
+            # Calculate timestep mask similar to diffusion model
+            t_bar = getattr(self.cfg, 'T_BAR', 0.9)
+            timestep_mask = (t <= t_bar).float()
+            
+            # Compute additional losses
+            # 1. InterLoss for interaction between agents
+            interloss_manager = InterLoss("l2", 22)
+            interloss_manager.forward(prediction, target, mask_reshaped, timestep_mask)
+            
+            # 2. GeometricLoss for each agent
+            loss_a_manager = GeometricLoss("l2", 22, "A")
+            loss_a_manager.forward(prediction[..., 0, :], target[..., 0, :], 
+                                   mask_reshaped[..., 0, :], timestep_mask)
+            
+            loss_b_manager = GeometricLoss("l2", 22, "B")
+            loss_b_manager.forward(prediction[..., 1, :], target[..., 1, :], 
+                                   mask_reshaped[..., 0, :], timestep_mask)
+            
+            # Collect all losses
+            losses = {
+                "flow_matching": fm_loss * self.loss_weights["FM"]
+            }
+            
+            # Add interaction losses
+            for key, value in interloss_manager.losses.items():
+                if key in self.loss_weights:
+                    losses[key] = value * self.loss_weights[key]
+                else:
+                    losses[key] = value
+            
+            # Add agent A losses
+            for key, value in loss_a_manager.losses.items():
+                losses[key] = value
+            
+            # Add agent B losses
+            for key, value in loss_b_manager.losses.items():
+                losses[key] = value
+            
+            # Calculate total loss
+            total_loss = losses["flow_matching"]
+            total_loss += loss_a_manager.losses.get("A", 0.0)
+            total_loss += loss_b_manager.losses.get("B", 0.0)
+            
+            # Add interaction loss to total if available
+            if "total" in interloss_manager.losses:
+                total_loss += interloss_manager.losses["total"]
+            
+            losses["total"] = total_loss
+            
             # Check for NaN and handle gracefully
-            if not torch.isfinite(fm_loss):
-                # Create a small dummy loss that maintains gradient flow
-                fm_loss = torch.ones(1, device=device, requires_grad=True)
-                
+            if not torch.isfinite(total_loss):
+                print("Warning: Non-finite values in loss calculation. Using fallback loss.")
+                losses["total"] = torch.ones(1, device=device, requires_grad=True)
+            
         except Exception as e:
-            print(f"Warning: Error in flow matching loss computation: {e}")
+            print(f"Warning: Error in loss computation: {e}")
             # Create a small dummy loss as fallback
-            fm_loss = torch.ones(1, device=device, requires_grad=True)
-        
-        # Prepare loss dictionary
-        losses = {
-            "flow_matching": fm_loss,
-            "total": self.fm_weight * fm_loss
-        }
+            losses = {
+                "flow_matching": torch.ones(1, device=device, requires_grad=True),
+                "total": torch.ones(1, device=device, requires_grad=True)
+            }
         
         return losses
     

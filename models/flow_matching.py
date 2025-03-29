@@ -99,6 +99,7 @@ class FlowMatching:
     def loss_fn(self, model, x_0, mask=None, cond=None, t_bar=None, **model_kwargs):
         """
         Compute the flow matching loss with numerical stability improvements.
+        Also returns predicted and target motion data for additional loss calculations.
         """
         B = x_0.shape[0]
         device = x_0.device
@@ -119,10 +120,14 @@ class FlowMatching:
         # Use smaller standard deviation for stability
         x_1 = torch.randn_like(x_0) * 0.5
         
-        # Apply normalization if needed
+        # Normalize original data if needed
+        x_0_normalized = x_0.clone()
         if self.motion_rep is not None:
-            # Skip normalization for now to avoid reshape issues
-            pass
+            # Store the original shape for later reference
+            B, T = x_0.shape[:2]
+            x_0_normalized = x_0_normalized.reshape(B, T, 2, -1)
+            x_0_normalized = self.normalizer.forward(x_0_normalized)
+            x_0_normalized = x_0_normalized.reshape(B, T, -1)
         
         # Get interpolated point and target velocity
         with torch.no_grad():
@@ -130,6 +135,18 @@ class FlowMatching:
         
         # Get model's velocity prediction
         v_pred = model(x_t, t, mask=mask, cond=cond, **model_kwargs)
+        
+        # Predict current x_0 using the ODE and the velocity field
+        # x_0_pred ≈ x_t - v_pred * t
+        # This is an approximate inversion of the flow
+        t_expanded = t.reshape(-1, 1, 1).expand(-1, x_t.shape[1], 1)
+        x_0_pred = x_t - v_pred * t_expanded
+        
+        # Reshape for additional loss computations
+        # These will be used for GeometricLoss and InterLoss
+        B, T = x_0.shape[:2]
+        x_0_pred_shaped = x_0_pred.reshape(B, T, 2, -1)  # [B, T, 2, D]
+        x_0_gt_shaped = x_0.reshape(B, T, 2, -1)  # [B, T, 2, D]
         
         # Automatic handling of NaN/Inf through gradient masking
         # Create a mask for valid values
@@ -164,7 +181,15 @@ class FlowMatching:
             # Create a small, non-zero loss that maintains gradient
             loss = torch.tensor(1.0, device=device, requires_grad=True)
         
-        return {"loss": loss, "x_t": x_t, "v_t": v_t, "v_pred": v_pred}
+        return {
+            "loss": loss, 
+            "x_t": x_t, 
+            "v_t": v_t, 
+            "v_pred": v_pred,
+            "t": t,
+            "pred": x_0_pred_shaped,  # For compatibility with diffusion losses
+            "target": x_0_gt_shaped,  # For compatibility with diffusion losses
+        }
     
     @torch.no_grad()
     def sample(self, model, shape, steps=100, x_init=None, mask=None, cond=None, 
@@ -248,5 +273,13 @@ class FlowMatching:
                 print(f"Error in sampling step {i}: {e}")
                 # Keep previous state with minimal perturbation
                 x_t = x_t + torch.randn_like(x_t) * 0.001
+        
+        # Apply denormalization if necessary
+        if self.motion_rep is not None and denoise_to_zero:
+            # Reshape output for denormalization
+            B, T = x_t.shape[:2]
+            x_t_reshaped = x_t.reshape(B, T, 2, -1)
+            x_t_denorm = self.normalizer.backward(x_t_reshaped, global_rt=True)
+            return x_t_denorm.reshape(B, T, -1)
         
         return x_t
