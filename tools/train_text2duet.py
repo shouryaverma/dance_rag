@@ -187,12 +187,8 @@ class LitTrainModel(pl.LightningModule):
 
 
 def build_models(cfg):
-    if cfg.NAME == "InterGen":
-        model = InterGen(cfg)
-    elif cfg.NAME == "DuetModel":
+    if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
-    # elif cfg.NAME == "MDMModel":
-    #     model = DuetModelMDM(cfg)
     else:
         raise NotImplementedError
     return model
@@ -201,8 +197,8 @@ def build_models(cfg):
 import argparse
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Process a string input.")
-    parser.add_argument("--model_cfg", type=str, required=True, help="")
-    parser.add_argument("--train_cfg", type=str, required=True, help="")
+    parser.add_argument("--model_cfg", type=str, default="configs/model_duet_debug.yaml", help="")
+    parser.add_argument("--train_cfg", type=str, default="configs/train_duet_debug.yaml", help="")
     parser.add_argument("--data_cfg", type=str, default="configs/datasets_duet.yaml", help="")
     args = parser.parse_args()
     print(args)
