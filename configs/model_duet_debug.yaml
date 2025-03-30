@@ -8,36 +8,16 @@ FF_SIZE: 1024
 ACTIVATION: gelu
 CHECKPOINT: checkpoints/DEBUG/model/epoch=1499-step=21000.ckpt
 
-# Diffusion parameters
 DIFFUSION_STEPS: 300
 BETA_SCHEDULER: cosine
 SAMPLER: uniform
+
 MOTION_REP: global
 FINETUNE: False
-TEXT_ENCODER: clip
 
-# Flow parameters
-T_BAR: 0.98
+TEXT_ENCODER: clip
+T_BAR: 200
+
 CONTROL: text
 STRATEGY: ddim50
 CFG_WEIGHT: 3.5
-SIGMA_MIN: 0.01
-SIGMA_MAX: 0.5
-RHO: 7
-SAMPLING_STEPS: 300
-SOLVER_TYPE: "euler"
-
-# Global loss weights
-FM_WEIGHT: 0.4
-INTER_WEIGHT: 0.3
-GEO_WEIGHT: 0.3
-
-# Individual loss weights
-RO_WEIGHT: 0.01
-JA_WEIGHT: 3.0
-DM_WEIGHT: 3.0
-VEL_WEIGHT: 30.0
-BL_WEIGHT: 10.0
-FC_WEIGHT: 30.0
-POSE_WEIGHT: 1.0
-TR_WEIGHT: 100.0

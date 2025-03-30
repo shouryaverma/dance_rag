@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 
+
 class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
     def __init__(self, optimizer, warmup, max_iters, verbose=False):
         self.warmup = warmup
@@ -17,6 +18,8 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
         if epoch <= self.warmup:
             lr_factor *= (epoch+1) * 1.0 / self.warmup
         return lr_factor
+
+
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.0, max_len=5000):
@@ -37,35 +40,23 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.shape[1], :].unsqueeze(0)
         return self.dropout(x)
 
+
 class TimestepEmbedder(nn.Module):
     def __init__(self, latent_dim, sequence_pos_encoder):
         super().__init__()
         self.latent_dim = latent_dim
         self.sequence_pos_encoder = sequence_pos_encoder
+
         time_embed_dim = self.latent_dim
         self.time_embed = nn.Sequential(
             nn.Linear(self.latent_dim, time_embed_dim),
             nn.SiLU(),
             nn.Linear(time_embed_dim, time_embed_dim),
         )
-        # For continuous time embedding
-        self.time_proj = nn.Sequential(
-            nn.Linear(1, self.latent_dim//2),
-            nn.SiLU(),
-            nn.Linear(self.latent_dim//2, self.latent_dim),
-        )
-        
+
     def forward(self, timesteps):
-        # Check if timesteps are continuous (floating point)
-        if isinstance(timesteps, torch.Tensor) and timesteps.dtype.is_floating_point:
-            # Handle continuous time values for flow matching
-            t_emb = timesteps.view(-1, 1)  # Reshape to [B, 1]
-            t_emb = self.time_proj(t_emb)  # Project to embedding dimension
-            return self.time_embed(t_emb)  # Further process with the time embedding layers
-        else:
-            # Original behavior for discrete timesteps (diffusion)
-            timesteps = timesteps.long()  # Ensure long tensor for indexing
-            return self.time_embed(self.sequence_pos_encoder.pe[timesteps])
+        return self.time_embed(self.sequence_pos_encoder.pe[timesteps])
+
 
 class IdentityEmbedder(nn.Module):
     def __init__(self, latent_dim, sequence_pos_encoder):
@@ -83,6 +74,7 @@ class IdentityEmbedder(nn.Module):
     def forward(self, timesteps):
         return self.time_embed(self.sequence_pos_encoder.pe[timesteps]).unsqueeze(1)
 
+
 def set_requires_grad(nets, requires_grad=False):
     """Set requies_grad for all the networks.
 
@@ -97,6 +89,7 @@ def set_requires_grad(nets, requires_grad=False):
         if net is not None:
             for param in net.parameters():
                 param.requires_grad = requires_grad
+
 
 def zero_module(module):
     """
