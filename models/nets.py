@@ -264,7 +264,7 @@ class InterDiffusion_Duet(nn.Module):
             x_start=x_start,
             t=t,
             mask=seq_mask,
-            t_bar=self.cfg.T_BAR,
+            t_bar= 200, #self.cfg.T_BAR,
             cond_mask=cond_mask,
             model_kwargs={"mask":seq_mask,
                           "cond":cond,

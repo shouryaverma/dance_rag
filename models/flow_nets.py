@@ -194,10 +194,26 @@ class InterFlowMatching_Duet(nn.Module):
         self.motion_rep = cfg.MOTION_REP
         
         # Flow model parameters
+        self.t_bar = cfg.T_BAR
         self.sigma_min = cfg.SIGMA_MIN
         self.sigma_max = cfg.SIGMA_MAX
         self.rho = cfg.RHO
         self.sampling_steps = cfg.SAMPLING_STEPS
+        self.solver_type = cfg.SOLVER_TYPE
+
+        # Loss weights parameters
+        self.fm_weight = cfg.FM_WEIGHT
+        self.inter_weight = cfg.INTER_WEIGHT
+        self.geo_weight = cfg.GEO_WEIGHT
+
+        self.ro_weight = cfg.RO_WEIGHT
+        self.ja_weight = cfg.JA_WEIGHT
+        self.dm_weight = cfg.DM_WEIGHT
+        self.vel_weight = cfg.VEL_WEIGHT
+        self.bl_weight = cfg.BL_WEIGHT
+        self.fc_weight = cfg.FC_WEIGHT
+        self.pose_weight = cfg.POSE_WEIGHT
+        self.tr_weight = cfg.TR_WEIGHT
         
         # Create flow matching engine
         self.flow_engine = FlowMatching(
@@ -221,15 +237,14 @@ class InterFlowMatching_Duet(nn.Module):
         
         # Create the loss weights dictionary
         self.loss_weights = {}
-        self.loss_weights["FM"] = getattr(cfg, 'FM_WEIGHT', 1.0)
-        self.loss_weights["RO"] = getattr(cfg, 'RO_WEIGHT', 0.01)
-        self.loss_weights["JA"] = getattr(cfg, 'JA_WEIGHT', 3.0)
-        self.loss_weights["DM"] = getattr(cfg, 'DM_WEIGHT', 3.0)
-        self.loss_weights["VEL"] = getattr(cfg, 'VEL_WEIGHT', 30.0)
-        self.loss_weights["BL"] = getattr(cfg, 'BL_WEIGHT', 10.0)
-        self.loss_weights["FC"] = getattr(cfg, 'FC_WEIGHT', 30.0)
-        self.loss_weights["POSE"] = getattr(cfg, 'POSE_WEIGHT', 1.0)
-        self.loss_weights["TR"] = getattr(cfg, 'TR_WEIGHT', 100.0)
+        self.loss_weights["RO"] = self.ro_weight
+        self.loss_weights["JA"] = self.ja_weight
+        self.loss_weights["DM"] = self.dm_weight
+        self.loss_weights["VEL"] = self.vel_weight
+        self.loss_weights["BL"] = self.bl_weight
+        self.loss_weights["FC"] = self.fc_weight
+        self.loss_weights["POSE"] = self.pose_weight
+        self.loss_weights["TR"] = self.tr_weight
         
         # Normalizer for converting between representations
         self.normalizer = MotionNormalizerTorch()
@@ -266,6 +281,11 @@ class InterFlowMatching_Duet(nn.Module):
                 self._mask_cache[cache_key] = seq_mask.cpu()
             seq_mask = seq_mask.to(device)
         
+        # Get global weights from config
+        fm_weight = self.fm_weight
+        inter_weight = self.inter_weight
+        geo_weight = self.geo_weight
+        
         # Compute flow matching loss with gradient tracking for backprop
         try:
             # Get flow matching results
@@ -290,7 +310,7 @@ class InterFlowMatching_Duet(nn.Module):
             mask_reshaped = seq_mask.reshape(B, T, -1, 1)
             
             # Calculate timestep mask similar to diffusion model
-            t_bar = getattr(self.cfg, 'T_BAR', 0.9)
+            t_bar = self.t_bar
             timestep_mask = (t <= t_bar).float()
             
             # Compute additional losses
@@ -301,15 +321,15 @@ class InterFlowMatching_Duet(nn.Module):
             # 2. GeometricLoss for each agent
             loss_a_manager = GeometricLoss("l2", 22, "A")
             loss_a_manager.forward(prediction[..., 0, :], target[..., 0, :], 
-                                   mask_reshaped[..., 0, :], timestep_mask)
+                                mask_reshaped[..., 0, :], timestep_mask)
             
             loss_b_manager = GeometricLoss("l2", 22, "B")
             loss_b_manager.forward(prediction[..., 1, :], target[..., 1, :], 
-                                   mask_reshaped[..., 0, :], timestep_mask)
+                                mask_reshaped[..., 0, :], timestep_mask)
             
             # Collect all losses
             losses = {
-                "flow_matching": fm_loss * self.loss_weights["FM"]
+                "flow_matching": fm_loss * fm_weight
             }
             
             # Add interaction losses
@@ -327,14 +347,20 @@ class InterFlowMatching_Duet(nn.Module):
             for key, value in loss_b_manager.losses.items():
                 losses[key] = value
             
-            # Calculate total loss
+            # Calculate total loss with proper weighting
             total_loss = losses["flow_matching"]
-            total_loss += loss_a_manager.losses.get("A", 0.0)
-            total_loss += loss_b_manager.losses.get("B", 0.0)
             
-            # Add interaction loss to total if available
+            # Apply global weights to groups of losses
+            # Add geometric losses with geo_weight
+            if "A" in loss_a_manager.losses:
+                total_loss += loss_a_manager.losses["A"] * geo_weight
+            
+            if "B" in loss_b_manager.losses:
+                total_loss += loss_b_manager.losses["B"] * geo_weight
+            
+            # Add interaction loss with inter_weight
             if "total" in interloss_manager.losses:
-                total_loss += interloss_manager.losses["total"]
+                total_loss += interloss_manager.losses["total"] * inter_weight
             
             losses["total"] = total_loss
             
@@ -390,7 +416,7 @@ class InterFlowMatching_Duet(nn.Module):
                 mask=mask,
                 cond=batch["cond"],
                 music=music_input,
-                solver_type=getattr(self.cfg, 'SOLVER_TYPE', 'euler')
+                solver_type=self.solver_type,
             )
             
             # Validate output and handle errors
