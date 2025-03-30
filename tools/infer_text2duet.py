@@ -169,7 +169,7 @@ def find_file_pairs(directory):
 
 if __name__ == '__main__':
     model_cfg = get_config("configs/model_duet_debug.yaml")
-    train_cfg = get_config("configs/infer_duet.yaml")
+    train_cfg = get_config("configs/infer_duet_debug.yaml")
     test_data_cfg = get_config("configs/datasets_duet.yaml").test_set
     datamodule = DataModule(None, None, test_data_cfg, train_cfg.TRAIN.BATCH_SIZE, train_cfg.TRAIN.NUM_WORKERS)
     datamodule.setup()

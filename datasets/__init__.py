@@ -52,9 +52,7 @@ class DataModule(pl.LightningDataModule):
         """
         Create train and validation datasets
         """
-        if self.cfg is not None and self.cfg.NAME == "interhuman":
-            self.train_dataset = InterHumanDataset(self.cfg)
-        elif (self.cfg is not None and self.cfg.NAME == "duet") or self.test_cfg.NAME == "duet":
+        if (self.cfg is not None and self.cfg.NAME == "duet") or self.test_cfg.NAME == "duet":
             if self.cfg is not None:
                 self.train_dataset = Text2Duet(self.cfg, self.cfg.music_root, self.cfg.motion_root, self.cfg.text_root, self.cfg.MODE)
             if self.val_cfg is not None:
