@@ -4,6 +4,7 @@ from tqdm.auto import tqdm
 from enum import Enum
 from utils.utils import MotionNormalizerTorch
 from models.losses import InterLoss, GeometricLoss
+from torchdiffeq import odeint
 
 class FlowType(Enum):
     """
@@ -153,10 +154,67 @@ class RectifiedFlow:
         
         return self._euler_step(x, velocity_avg, dt)
     
-    def sample(self, model, shape, noise=None, clip_denoised=True, model_kwargs=None, device=None, progress=False):
+    def _dopri5_step(self, model, x, t, t_next, dt, model_kwargs):
+        """
+        Dormand-Prince (DOPRI5) method for more accurate integration
+        This is a simplified implementation without adaptive step size
+        """
+        # DOPRI5 coefficients
+        c2, c3, c4, c5, c6 = 1/5, 3/10, 4/5, 8/9, 1.0
+        
+        a21 = 1/5
+        a31, a32 = 3/40, 9/40
+        a41, a42, a43 = 44/45, -56/15, 32/9
+        a51, a52, a53, a54 = 19372/6561, -25360/2187, 64448/6561, -212/729
+        a61, a62, a63, a64, a65 = 9017/3168, -355/33, 46732/5247, 49/176, -5103/18656
+        
+        b1, b3, b4, b5, b6 = 35/384, 500/1113, 125/192, -2187/6784, 11/84
+        
+        # Convert t and t_next to integers
+        t_int = t.long()
+        t_next_int = t_next.long()
+        
+        # Stage 1 - at time t
+        k1 = model(x, self._scale_timesteps(t_int), **model_kwargs)
+        
+        # Stage 2
+        # Instead of interpolating the timestep, we'll use discrete timesteps that are valid indices
+        t2_float = t * (1 - c2) + t_next * c2
+        t2_int = torch.clamp(t2_float.round().long(), min=0, max=self.num_timesteps-1)
+        x2 = x - dt * a21 * k1
+        k2 = model(x2, self._scale_timesteps(t2_int), **model_kwargs)
+        
+        # Stage 3
+        t3_float = t * (1 - c3) + t_next * c3
+        t3_int = torch.clamp(t3_float.round().long(), min=0, max=self.num_timesteps-1)
+        x3 = x - dt * (a31 * k1 + a32 * k2)
+        k3 = model(x3, self._scale_timesteps(t3_int), **model_kwargs)
+        
+        # Stage 4
+        t4_float = t * (1 - c4) + t_next * c4
+        t4_int = torch.clamp(t4_float.round().long(), min=0, max=self.num_timesteps-1)
+        x4 = x - dt * (a41 * k1 + a42 * k2 + a43 * k3)
+        k4 = model(x4, self._scale_timesteps(t4_int), **model_kwargs)
+        
+        # Stage 5
+        t5_float = t * (1 - c5) + t_next * c5
+        t5_int = torch.clamp(t5_float.round().long(), min=0, max=self.num_timesteps-1)
+        x5 = x - dt * (a51 * k1 + a52 * k2 + a53 * k3 + a54 * k4)
+        k5 = model(x5, self._scale_timesteps(t5_int), **model_kwargs)
+        
+        # Stage 6
+        # This is at t_next which is already an integer
+        x6 = x - dt * (a61 * k1 + a62 * k2 + a63 * k3 + a64 * k4 + a65 * k5)
+        k6 = model(x6, self._scale_timesteps(t_next_int), **model_kwargs)
+        
+        # Combine results for the final step (5th order)
+        x_next = x - dt * (b1 * k1 + b3 * k3 + b4 * k4 + b5 * k5 + b6 * k6)
+        
+        return x_next
+    
+    def sample(self, model, shape, noise=None, model_kwargs=None, device=None, progress=False):
         """
         Sample from the model using numerical integration of the flow ODE.
-        Uses Heun's method for better numerical stability.
         """
         if device is None:
             device = next(model.parameters()).device
@@ -173,7 +231,7 @@ class RectifiedFlow:
         # Keep original_timesteps as a list for indexing, but use tqdm for display if needed
         timesteps_iter = tqdm(original_timesteps) if progress else original_timesteps
         
-        # Improved numerical integration with Heun's method
+        # Numerical integration with DOPRI5 method
         for i, t in enumerate(timesteps_iter):
             t_tensor = torch.tensor([t] * shape[0], device=device)
             
@@ -190,8 +248,8 @@ class RectifiedFlow:
                 dt = 1.0 / self.num_timesteps
                 
                 with torch.no_grad():
-                    x = self._heun_step(model, x, t_tensor, t_next_tensor, dt, model_kwargs)
-                
+                    x = self._dopri5_step(model, x, t_tensor, t_next_tensor, dt, model_kwargs)
+                    # x = self._heun_step(model, x, t_tensor, t_next_tensor, dt, model_kwargs)
         return x
     
     def _scale_timesteps(self, t):
