@@ -194,7 +194,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Process a string input.")
     parser.add_argument("--model_cfg", type=str, default="configs/model_duet_debug.yaml", help="")
     parser.add_argument("--train_cfg", type=str, default="configs/train_duet_debug.yaml", help="")
-    parser.add_argument("--data_cfg", type=str, default="configs/datasets_duet.yaml", help="")
+    parser.add_argument("--data_cfg", type=str, default="configs/datasets_duet_prerit.yaml", help="")
     args = parser.parse_args()
     print(args)
     
@@ -231,9 +231,10 @@ if __name__ == '__main__':
                                                        save_top_k = -1)
     trainer = pl.Trainer(
         default_root_dir=litmodel.model_dir,
-        devices="auto", accelerator='gpu',
+        devices=1, accelerator='gpu',
         max_epochs=train_cfg.TRAIN.EPOCH,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        #strategy=DDPStrategy(find_unused_parameters=True),
+        strategy=None,
         precision=32,
         callbacks=[checkpoint_callback],
         check_val_every_n_epoch = train_cfg.TRAIN.SAVE_EPOCH,
