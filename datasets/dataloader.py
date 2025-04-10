@@ -92,7 +92,7 @@ def build_dataloader(dataset: Dataset,
         DataLoader: A PyTorch dataloader.
     """
     rank, world_size = get_dist_info()
-    world_size = 1
+    # world_size = 1
     if dist:
         sampler = DistributedSampler(
             dataset, world_size, rank, shuffle=shuffle, round_up=round_up)
