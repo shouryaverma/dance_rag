@@ -1,4 +1,5 @@
 from .layers import *
+from .mmdit.mmdit_generalized_pytorch import MMDiT
 
 class TransformerBlock(nn.Module):
     def __init__(self,
@@ -56,3 +57,27 @@ class DoubleTransformerBlock(nn.Module):
         out = self.ffn(h3, emb)
         out = out + h3
         return out
+
+
+class MMDiTBlock(nn.Module):
+    def __init__(self, latent_dim=512, num_heads=8, ff_size=1024, dropout=0.1, **kwargs):
+        super().__init__()
+        self.mmdit = MMDiT(
+            depth=1,
+            dim_modalities=(latent_dim, latent_dim, latent_dim),
+            dim_cond=latent_dim,
+            qk_rmsnorm=True
+        )
+
+    def forward(self, x, y, music, emb=None, key_padding_mask=None):
+        modality_tokens = (x, y, music)
+        modality_masks = (key_padding_mask, key_padding_mask, key_padding_mask)
+
+        x_out, y_out, music_out = self.mmdit(
+            modality_tokens=modality_tokens,
+            modality_masks=modality_masks,
+            time_cond=emb
+        )
+
+        # Return only the updated x_out for compatibility with previous design
+        return x_out

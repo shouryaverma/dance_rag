@@ -57,16 +57,25 @@ class InterFlowNet_Duet(nn.Module):
         
         # Dual transformer blocks for interactive modeling
         self.blocks = nn.ModuleList()
+        # for i in range(num_layers):
+        #     self.blocks.append(
+        #         DoubleTransformerBlock(
+        #             num_heads=num_heads,
+        #             latent_dim=latent_dim,
+        #             dropout=dropout, 
+        #             ff_size=ff_size
+        #         )
+        #     )
         for i in range(num_layers):
             self.blocks.append(
-                DoubleTransformerBlock(
+                MMDiTBlock(
                     num_heads=num_heads,
                     latent_dim=latent_dim,
                     dropout=dropout, 
                     ff_size=ff_size
                 )
             )
-            
+          
         # Output layer - zero initialization for better stability at the beginning of training
         self.out = zero_module(FinalLayer(self.latent_dim, self.input_feats))
     
