@@ -231,9 +231,11 @@ if __name__ == '__main__':
                                                        save_top_k = -1)
     trainer = pl.Trainer(
         default_root_dir=litmodel.model_dir,
-        devices="auto", accelerator='gpu',
+        # devices="auto",
+        devices=1,
+        accelerator='gpu',
         max_epochs=train_cfg.TRAIN.EPOCH,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        # strategy=DDPStrategy(find_unused_parameters=True),
         strategy=None,
         precision=32,
         callbacks=[checkpoint_callback],

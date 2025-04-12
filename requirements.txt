@@ -14,6 +14,8 @@ smplx~=0.1.28
 torch==1.13.1+cu117
 torchvision==0.14.1+cu117
 torchaudio==0.13.1
+x-transformers==2.0.0
+torchdiffeq==0.2.5
 git+https://github.com/openai/CLIP.git
 
 #conda install -c conda-forge ffmpeg
