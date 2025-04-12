@@ -18,7 +18,6 @@ class InterFlowNet_Duet(nn.Module):
         num_layers=8,
         num_heads=8,
         dropout=0.1,
-        activation="gelu",
         **kwargs
     ):
         super().__init__()
@@ -66,12 +65,20 @@ class InterFlowNet_Duet(nn.Module):
         #             ff_size=ff_size
         #         )
         #     )
+
+        # # MMDiT blocks for interactive modeling
+        # for i in range(num_layers):
+        #     self.blocks.append(
+        #         MMDiTBlock(latent_dim=latent_dim,)
+        #     )
+
+        # # Custom MM-DiT blocks for interactive modeling
         for i in range(num_layers):
             self.blocks.append(
-                MMDiTBlock(
-                    num_heads=num_heads,
+                CustomizedMMDiTBlock(
                     latent_dim=latent_dim,
-                    dropout=dropout, 
+                    num_heads=num_heads,
+                    dropout=dropout,
                     ff_size=ff_size
                 )
             )
@@ -123,16 +130,31 @@ class InterFlowNet_Duet(nn.Module):
         # Verify music and motion have compatible shapes
         assert music_emb.shape[1] == T, (music_emb.shape, x_a.shape)
         
-        # Process through dual transformer blocks
+        # # Process through dual transformer blocks
+        # for i, block in enumerate(self.blocks):
+        #     h_a = block(h_a_prev, h_b_prev, music_emb, emb, key_padding_mask)
+        #     h_b = block(h_b_prev, h_a_prev, music_emb, emb, key_padding_mask)
+        #     h_a_prev = h_a
+        #     h_b_prev = h_b
+        # Generate output velocities for both dancers
+        # output_a = self.out(h_a)
+        # output_b = self.out(h_b)
+        # # End of block dual transformer processing
+
+        # Process through MM-DiT blocks
         for i, block in enumerate(self.blocks):
-            h_a = block(h_a_prev, h_b_prev, music_emb, emb, key_padding_mask)
-            h_b = block(h_b_prev, h_a_prev, music_emb, emb, key_padding_mask)
-            h_a_prev = h_a
-            h_b_prev = h_b
+            h_a_all, h_b_all, music_emb_all = block(
+                h_a_prev, h_b_prev, music_emb, 
+                emb, key_padding_mask
+            )
+            # update previous hidden states
+            h_a_prev = h_a_all
+            h_b_prev = h_b_all
+            music_emb = music_emb_all
         
         # Generate output velocities for both dancers
-        output_a = self.out(h_a)
-        output_b = self.out(h_b)
+        output_a = self.out(h_a_prev)
+        output_b = self.out(h_b_prev)
         
         # Combine outputs
         output = torch.cat([output_a, output_b], dim=-1)

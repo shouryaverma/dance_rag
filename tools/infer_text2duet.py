@@ -23,8 +23,6 @@ class LitGenModel(pl.LightningModule):
         super().__init__()
         # cfg init
         self.cfg = cfg
-        self.mode = cfg.TRAIN.MODE
-
         self.automatic_optimization = False
 
         self.save_root = pjoin(self.cfg.GENERAL.CHECKPOINT, self.cfg.GENERAL.EXP_NAME)
