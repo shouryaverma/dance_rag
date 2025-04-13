@@ -12,7 +12,6 @@ class DuetModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.latent_dim = cfg.LATENT_DIM
         self.decoder = InterFlowMatching_Duet(cfg)
         # self.decoder = InterDiffusion_Duet(cfg, sampling_strategy=cfg.STRATEGY)
         

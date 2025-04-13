@@ -19,7 +19,7 @@ class InterFlowNet_Duet(nn.Module):
         num_heads=8,
         dropout=0.1,
         attention_type="mla",  # Options: "vanilla", "flash", "mla"
-        compression_ratio=4,   # For MLA - controls latent dimension size
+        compression_ratio=2,   # For MLA - controls latent dimension size
         **kwargs
     ):
         super().__init__()
