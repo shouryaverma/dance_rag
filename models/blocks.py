@@ -1,4 +1,6 @@
 from .layers import *
+from .mla_layers import *
+from .flash_layers import *
 from .mmdit.mmdit_generalized_pytorch import MMDiT
 
 class TransformerBlock(nn.Module):
@@ -58,30 +60,29 @@ class DoubleTransformerBlock(nn.Module):
         out = out + h3
         return out
 
+# class MMDiTBlock(nn.Module):
+#     def __init__(self, latent_dim=512, **kwargs):
+#         super().__init__()
+#         self.mmdit = MMDiT(
+#             depth=1,
+#             dim_modalities=(latent_dim, latent_dim, latent_dim),
+#             dim_cond=latent_dim,
+#             qk_rmsnorm=True,
+#         )
 
-class MMDiTBlock(nn.Module):
-    def __init__(self, latent_dim=512, **kwargs):
-        super().__init__()
-        self.mmdit = MMDiT(
-            depth=1,
-            dim_modalities=(latent_dim, latent_dim, latent_dim),
-            dim_cond=latent_dim,
-            qk_rmsnorm=True,
-        )
+#     def forward(self, x, y, music, emb=None, key_padding_mask=None):
+#         modality_tokens = (x, y, music)
+#         modality_masks = (key_padding_mask, key_padding_mask, key_padding_mask)
 
-    def forward(self, x, y, music, emb=None, key_padding_mask=None):
-        modality_tokens = (x, y, music)
-        modality_masks = (key_padding_mask, key_padding_mask, key_padding_mask)
+#         x_out, y_out, music_out = self.mmdit(
+#             modality_tokens=modality_tokens,
+#             modality_masks=modality_masks,
+#             time_cond=emb
+#         )
 
-        x_out, y_out, music_out = self.mmdit(
-            modality_tokens=modality_tokens,
-            modality_masks=modality_masks,
-            time_cond=emb
-        )
+#         return x_out, y_out, music_out
 
-        return x_out, y_out, music_out
-
-class CustomMMDiTBlock(nn.Module):
+class VanillaCustomBlock(nn.Module):
     def __init__(
         self,
         latent_dim=512,
@@ -91,12 +92,6 @@ class CustomMMDiTBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
-        
-        # Music self-attention and processing
-        # self.music_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
-        # self.music_norm1 = nn.LayerNorm(latent_dim)
-        # self.music_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        # self.music_norm2 = nn.LayerNorm(latent_dim)
         
         # Dancer self-attention
         self.dancer_a_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
@@ -123,12 +118,6 @@ class CustomMMDiTBlock(nn.Module):
         self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
         
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
-        # Process music with self-attention only (affected by text conditioning but not by motion)
-        # music_norm = self.music_norm1(music)
-        # music_attn = self.music_self_attn(music_norm, emb, key_padding_mask)
-        # music_res1 = music + music_attn
-        # music_norm2 = self.music_norm2(music_res1)
-        # music_out = music_res1 + self.music_ffn(music_norm2, emb)
         
         # Process dancers with self-attention
         x_norm1 = self.dancer_a_norm1(x)
@@ -156,7 +145,7 @@ class CustomMMDiTBlock(nn.Module):
         
         return x_final, y_final, music
     
-class CustomizedMMDiTBlock(nn.Module):
+class VanillaCustomizedBlock(nn.Module):
     def __init__(
         self, 
         latent_dim=512, 
@@ -166,7 +155,7 @@ class CustomizedMMDiTBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
-        self.custom_block = CustomMMDiTBlock(
+        self.custom_block = VanillaCustomBlock(
             latent_dim=latent_dim,
             num_heads=num_heads,
             ff_size=ff_size,
@@ -174,5 +163,217 @@ class CustomizedMMDiTBlock(nn.Module):
             **kwargs
         )
         
+    def forward(self, x, y, music, emb=None, key_padding_mask=None):
+        return self.custom_block(x, y, music, emb, key_padding_mask)
+
+class FlashCustomBlock(nn.Module):
+    """Enhanced version of CustomBlock using Flash Attention"""
+    def __init__(
+        self,
+        latent_dim=512,
+        num_heads=8,
+        ff_size=1024,
+        dropout=0.1,
+        **kwargs
+    ):
+        super().__init__()
+       
+        # Dancer self-attention with Flash Attention
+        self.dancer_a_self_attn = FlashSelfAttention(latent_dim, num_heads, dropout)
+        self.dancer_b_self_attn = FlashSelfAttention(latent_dim, num_heads, dropout)
+        self.dancer_a_norm1 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm1 = nn.LayerNorm(latent_dim)
+       
+        # Cross-attention: music → dancers (one-way) with Flash Attention
+        self.music_to_a_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.music_to_b_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm2 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm2 = nn.LayerNorm(latent_dim)
+       
+        # Cross-attention: dancers interact with Flash Attention
+        self.a_to_b_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.b_to_a_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm3 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm3 = nn.LayerNorm(latent_dim)
+       
+        # Feedforward networks for dancers
+        self.dancer_a_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
+       
+    def forward(self, x, y, music, emb=None, key_padding_mask=None):
+        # Process dancers with self-attention
+        x_norm1 = self.dancer_a_norm1(x)
+        y_norm1 = self.dancer_b_norm1(y)
+        x_self = x + self.dancer_a_self_attn(x_norm1, emb, key_padding_mask)
+        y_self = y + self.dancer_b_self_attn(y_norm1, emb, key_padding_mask)
+       
+        # Apply music conditioning to dancers (one-way)
+        x_norm2 = self.dancer_a_norm2(x_self)
+        y_norm2 = self.dancer_b_norm2(y_self)
+        x_music = x_self + self.music_to_a_attn(x_norm2, music, emb, key_padding_mask)
+        y_music = y_self + self.music_to_b_attn(y_norm2, music, emb, key_padding_mask)
+       
+        # Dancers interact with each other
+        x_norm3 = self.dancer_a_norm3(x_music)
+        y_norm3 = self.dancer_b_norm3(y_music)
+        x_interact = x_music + self.b_to_a_attn(x_norm3, y_music, emb, key_padding_mask)
+        y_interact = y_music + self.a_to_b_attn(y_norm3, x_music, emb, key_padding_mask)
+       
+        # Apply feedforward networks to dancers
+        x_norm4 = self.dancer_a_norm4(x_interact)
+        y_norm4 = self.dancer_b_norm4(y_interact)
+        x_final = x_interact + self.dancer_a_ffn(x_norm4, emb)
+        y_final = y_interact + self.dancer_b_ffn(y_norm4, emb)
+       
+        return x_final, y_final, music
+
+class FlashCustomizedBlock(nn.Module):
+    """Wrapper for FlashCustomBlock"""
+    def __init__(
+        self,
+        latent_dim=512,
+        num_heads=8,
+        ff_size=1024,
+        dropout=0.1,
+        **kwargs
+    ):
+        super().__init__()
+        self.custom_block = FlashCustomBlock(
+            latent_dim=latent_dim,
+            num_heads=num_heads,
+            ff_size=ff_size,
+            dropout=dropout,
+            **kwargs
+        )
+       
+    def forward(self, x, y, music, emb=None, key_padding_mask=None):
+        return self.custom_block(x, y, music, emb, key_padding_mask)
+
+class MLA_CustomBlock(nn.Module):
+    """Enhanced CustomBlock using Multi-Head Latent Attention"""
+    def __init__(
+        self,
+        latent_dim=512,
+        num_heads=8,
+        ff_size=1024,
+        dropout=0.1,
+        compression_ratio=4,
+        **kwargs
+    ):
+        super().__init__()
+       
+        # Dancer self-attention with MLA
+        self.dancer_a_self_attn = MLA_SelfAttention(
+            latent_dim=latent_dim, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            compression_ratio=compression_ratio
+        )
+        self.dancer_b_self_attn = MLA_SelfAttention(
+            latent_dim=latent_dim, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            compression_ratio=compression_ratio
+        )
+        self.dancer_a_norm1 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm1 = nn.LayerNorm(latent_dim)
+       
+        # Cross-attention: music → dancers with MLA
+        self.music_to_a_attn = MLA_CrossAttention(
+            latent_dim=latent_dim, 
+            xf_latent_dim=latent_dim, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            embed_dim=latent_dim,
+            compression_ratio=compression_ratio
+        )
+        self.music_to_b_attn = MLA_CrossAttention(
+            latent_dim=latent_dim, 
+            xf_latent_dim=latent_dim, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            embed_dim=latent_dim,
+            compression_ratio=compression_ratio
+        )
+        self.dancer_a_norm2 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm2 = nn.LayerNorm(latent_dim)
+       
+        # Cross-attention: dancers interact with MLA
+        self.a_to_b_attn = MLA_CrossAttention(
+            latent_dim=latent_dim, 
+            xf_latent_dim=latent_dim, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            embed_dim=latent_dim,
+            compression_ratio=compression_ratio
+        )
+        self.b_to_a_attn = MLA_CrossAttention(
+            latent_dim=latent_dim, 
+            xf_latent_dim=latent_dim, 
+            num_heads=num_heads, 
+            dropout=dropout,
+            embed_dim=latent_dim,
+            compression_ratio=compression_ratio
+        )
+        self.dancer_a_norm3 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm3 = nn.LayerNorm(latent_dim)
+       
+        # Feedforward networks for dancers
+        self.dancer_a_ffn = MLA_FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_b_ffn = MLA_FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
+       
+    def forward(self, x, y, music, emb=None, key_padding_mask=None):
+        # Process dancers with self-attention
+        x_norm1 = self.dancer_a_norm1(x)
+        y_norm1 = self.dancer_b_norm1(y)
+        x_self = x + self.dancer_a_self_attn(x_norm1, emb, key_padding_mask)
+        y_self = y + self.dancer_b_self_attn(y_norm1, emb, key_padding_mask)
+       
+        # Apply music conditioning to dancers (one-way)
+        x_norm2 = self.dancer_a_norm2(x_self)
+        y_norm2 = self.dancer_b_norm2(y_self)
+        x_music = x_self + self.music_to_a_attn(x_norm2, music, emb, key_padding_mask)
+        y_music = y_self + self.music_to_b_attn(y_norm2, music, emb, key_padding_mask)
+       
+        # Dancers interact with each other
+        x_norm3 = self.dancer_a_norm3(x_music)
+        y_norm3 = self.dancer_b_norm3(y_music)
+        x_interact = x_music + self.b_to_a_attn(x_norm3, y_music, emb, key_padding_mask)
+        y_interact = y_music + self.a_to_b_attn(y_norm3, x_music, emb, key_padding_mask)
+       
+        # Apply feedforward networks to dancers
+        x_norm4 = self.dancer_a_norm4(x_interact)
+        y_norm4 = self.dancer_b_norm4(y_interact)
+        x_final = x_interact + self.dancer_a_ffn(x_norm4, emb)
+        y_final = y_interact + self.dancer_b_ffn(y_norm4, emb)
+       
+        return x_final, y_final, music
+
+
+class MLA_CustomizedBlock(nn.Module):
+    """Wrapper for MLA_CustomBlock"""
+    def __init__(
+        self,
+        latent_dim=512,
+        num_heads=8,
+        ff_size=1024,
+        dropout=0.1,
+        compression_ratio=4,
+        **kwargs
+    ):
+        super().__init__()
+        self.custom_block = MLA_CustomBlock(
+            latent_dim=latent_dim,
+            num_heads=num_heads,
+            ff_size=ff_size,
+            dropout=dropout,
+            compression_ratio=compression_ratio,
+            **kwargs
+        )
+       
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
         return self.custom_block(x, y, music, emb, key_padding_mask)

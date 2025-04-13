@@ -18,6 +18,8 @@ class InterFlowNet_Duet(nn.Module):
         num_layers=8,
         num_heads=8,
         dropout=0.1,
+        attention_type="mla",  # Options: "vanilla", "flash", "mla"
+        compression_ratio=4,   # For MLA - controls latent dimension size
         **kwargs
     ):
         super().__init__()
@@ -54,8 +56,10 @@ class InterFlowNet_Duet(nn.Module):
             num_layers=4
         )
         
-        # Dual transformer blocks for interactive modeling
+        # Interactive modeling blocks
         self.blocks = nn.ModuleList()
+        
+        # Dual transformer blocks for interactive modeling
         # for i in range(num_layers):
         #     self.blocks.append(
         #         DoubleTransformerBlock(
@@ -72,16 +76,40 @@ class InterFlowNet_Duet(nn.Module):
         #         MMDiTBlock(latent_dim=latent_dim,)
         #     )
 
-        # # Custom MM-DiT blocks for interactive modeling
-        for i in range(num_layers):
-            self.blocks.append(
-                CustomizedMMDiTBlock(
-                    latent_dim=latent_dim,
-                    num_heads=num_heads,
-                    dropout=dropout,
-                    ff_size=ff_size
+        # Choose block type based on attention_type
+        if attention_type == "vanilla":
+            for i in range(num_layers):
+                self.blocks.append(
+                    VanillaCustomizedBlock(
+                        latent_dim=latent_dim,
+                        num_heads=num_heads,
+                        dropout=dropout,
+                        ff_size=ff_size
+                    )
                 )
-            )
+        elif attention_type == "flash":
+            for i in range(num_layers):
+                self.blocks.append(
+                    FlashCustomizedBlock(
+                        latent_dim=latent_dim,
+                        num_heads=num_heads,
+                        dropout=dropout,
+                        ff_size=ff_size
+                    )
+                )
+        elif attention_type == "mla":
+            for i in range(num_layers):
+                self.blocks.append(
+                    MLA_CustomizedBlock(
+                        latent_dim=latent_dim,
+                        num_heads=num_heads,
+                        dropout=dropout,
+                        ff_size=ff_size,
+                        compression_ratio=compression_ratio
+                    )
+                )
+        else:
+            raise ValueError(f"Unknown attention type: {attention_type}")
           
         # Output layer - zero initialization for better stability at the beginning of training
         self.out = zero_module(FinalLayer(self.latent_dim, self.input_feats))
