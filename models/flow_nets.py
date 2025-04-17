@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from models.utils import *
 from models.blocks import *
+from models.blocksmm import *
 from models.flow_matching import RectifiedFlow, FlowType
 
 class InterFlowNet_Duet(nn.Module):
@@ -18,8 +19,7 @@ class InterFlowNet_Duet(nn.Module):
         num_layers=8,
         num_heads=8,
         dropout=0.1,
-        attention_type="mla",  # Options: "vanilla", "flash", "mla"
-        compression_ratio=2,   # For MLA - controls latent dimension size
+        attention_type="mmdit",  # Options: "vanilla", "flash", "mmdit"
         **kwargs
     ):
         super().__init__()
@@ -70,12 +70,6 @@ class InterFlowNet_Duet(nn.Module):
         #         )
         #     )
 
-        # # MMDiT blocks for interactive modeling
-        # for i in range(num_layers):
-        #     self.blocks.append(
-        #         MMDiTBlock(latent_dim=latent_dim,)
-        #     )
-
         # Choose block type based on attention_type
         if attention_type == "vanilla":
             for i in range(num_layers):
@@ -97,15 +91,15 @@ class InterFlowNet_Duet(nn.Module):
                         ff_size=ff_size
                     )
                 )
-        elif attention_type == "mla":
+        elif attention_type == "mmdit":
             for i in range(num_layers):
                 self.blocks.append(
-                    MLA_CustomizedBlock(
+                    MMDiTDancerBlockAdvanced(
                         latent_dim=latent_dim,
                         num_heads=num_heads,
                         dropout=dropout,
                         ff_size=ff_size,
-                        compression_ratio=compression_ratio
+                        num_residual_streams=4  # Try different values
                     )
                 )
         else:
@@ -169,12 +163,10 @@ class InterFlowNet_Duet(nn.Module):
         # output_b = self.out(h_b)
         # # End of block dual transformer processing
 
-        # Process through MM-DiT blocks
+        # Process through custom blocks
         for i, block in enumerate(self.blocks):
-            h_a_all, h_b_all, music_emb_all = block(
-                h_a_prev, h_b_prev, music_emb, 
-                emb, key_padding_mask
-            )
+            h_a_all, h_b_all, music_emb_all = block(h_a_prev, h_b_prev, music_emb, emb, key_padding_mask)
+
             # update previous hidden states
             h_a_prev = h_a_all
             h_b_prev = h_b_all

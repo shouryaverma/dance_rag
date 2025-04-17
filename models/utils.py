@@ -18,8 +18,6 @@ class CosineWarmupScheduler(torch.optim.lr_scheduler._LRScheduler):
             lr_factor *= (epoch+1) * 1.0 / self.warmup
         return lr_factor
 
-
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.0, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -39,7 +37,6 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.shape[1], :].unsqueeze(0)
         return self.dropout(x)
 
-
 class TimestepEmbedder(nn.Module):
     def __init__(self, latent_dim, sequence_pos_encoder):
         super().__init__()
@@ -55,7 +52,6 @@ class TimestepEmbedder(nn.Module):
 
     def forward(self, timesteps):
         return self.time_embed(self.sequence_pos_encoder.pe[timesteps])
-
 
 class IdentityEmbedder(nn.Module):
     def __init__(self, latent_dim, sequence_pos_encoder):
@@ -73,7 +69,6 @@ class IdentityEmbedder(nn.Module):
     def forward(self, timesteps):
         return self.time_embed(self.sequence_pos_encoder.pe[timesteps]).unsqueeze(1)
 
-
 def set_requires_grad(nets, requires_grad=False):
     """Set requies_grad for all the networks.
 
@@ -88,7 +83,6 @@ def set_requires_grad(nets, requires_grad=False):
         if net is not None:
             for param in net.parameters():
                 param.requires_grad = requires_grad
-
 
 def zero_module(module):
     """

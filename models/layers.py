@@ -46,7 +46,6 @@ class VanillaSelfAttention(nn.Module):
                            need_weights=False)[0]
         return y
 
-
 class VanillaCrossAttention(nn.Module):
 
     def __init__(self, latent_dim, xf_latent_dim, num_head, dropout, embed_dim=None):
@@ -70,7 +69,6 @@ class VanillaCrossAttention(nn.Module):
                            need_weights=False)[0]
         return y
 
-
 class FFN(nn.Module):
     def __init__(self, latent_dim, ffn_dim, dropout, embed_dim=None):
         super().__init__()
@@ -87,7 +85,6 @@ class FFN(nn.Module):
             x_norm = x
         y = self.linear2(self.dropout(self.activation(self.linear1(x_norm))))
         return y
-
 
 class FinalLayer(nn.Module):
     def __init__(self, latent_dim, out_dim):
