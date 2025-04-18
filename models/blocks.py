@@ -255,7 +255,7 @@ class FlashReactcustomBlock(nn.Module):
         self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.follower_norm4 = nn.LayerNorm(latent_dim)
        
-    def forward(self, follower, lead, music, emb=None, key_padding_mask=None):
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
         # Process follower with self-attention
         follower_norm1 = self.follower_norm1(follower)
         follower_self = follower + self.follower_self_attn(follower_norm1, emb, key_padding_mask)

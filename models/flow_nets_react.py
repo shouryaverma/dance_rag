@@ -76,26 +76,21 @@ class InterFlowNet_React(nn.Module):
         # Output layer - zero initialization for better stability
         self.out = zero_module(FinalLayer(self.latent_dim, self.input_feats))
     
-    def forward(self, x, timesteps, mask=None, cond=None, music=None, lead_motion=None):
+    def forward(self, x, timesteps, mask=None, cond=None, music=None):
         """
-        Forward pass to predict velocity field for both dancers in reactive mode.
-        For loss calculation, we handle combined representation.
-        For inference, we only predict the follower's motion.
+        Forward pass to predict velocity field for reactive dancing.
+        Only the follower's motion will be updated.
         
         Args:
-            x (torch.Tensor): Input tensor - either combined (B,T,2D) or follower only (B,T,D)
-            timesteps (torch.Tensor): Timesteps tensor of shape (B)
+            x (torch.Tensor): Input tensor of shape [B, T, 2*D]
+            timesteps (torch.Tensor): Timesteps tensor of shape [B]
             mask (torch.Tensor, optional): Mask tensor
             cond (torch.Tensor, optional): Text conditioning tensor
             music (torch.Tensor, optional): Music conditioning tensor
-            lead_motion (torch.Tensor): Lead dancer's motion tensor (B,T,D)
-            
-        Returns:
-            torch.Tensor: Predicted velocity field
         """
         B, T = x.shape[0], x.shape[1]
         
-        # Split input into dancer A and dancer B
+        # Split input into dancer A lead and dancer B follower
         x_a, x_b = x[..., :self.input_feats], x[..., self.input_feats:]
         
         if mask is not None:
@@ -123,15 +118,15 @@ class InterFlowNet_React(nn.Module):
         # Verify music and motion have compatible shapes
         assert music_emb.shape[1] == T, (music_emb.shape, x_a.shape)
         
-        # Process through reactive blocks
+        # Process through custom blocks
         for i, block in enumerate(self.blocks):
-            h_a_all, h_b_all, music_emb_all = block(h_b_prev, h_a_prev, music_emb, emb, key_padding_mask)
-        
+            h_a_all, h_b_all, music_emb_all = block(h_a_prev, h_b_prev, music_emb, emb, key_padding_mask)
+
             # update previous hidden states
             h_a_prev = h_a_all
             h_b_prev = h_b_all
             music_emb = music_emb_all
-
+        
         # Generate output velocities for both dancers
         output_a = self.out(h_a_prev)
         output_b = self.out(h_b_prev)
@@ -143,7 +138,7 @@ class InterFlowNet_React(nn.Module):
 
 class InterFlowMatching_React(nn.Module):
     """
-    Rectified Flow Matching model for reactive follower motion generation.
+    Rectified Flow Matching model for duet motion generation.
     This is the main class that integrates the flow model with the denoising network.
     """
     def __init__(self, cfg):
@@ -182,6 +177,9 @@ class InterFlowMatching_React(nn.Module):
         Compute training loss
         """
         x_start = batch["motions"]
+
+        print("Batch shape:", batch["motions"].shape)
+        
         B = x_start.shape[0]
         cond = batch.get("cond", None)
         music = batch.get("music", None)
