@@ -19,7 +19,7 @@ class InterFlowNet_Duet(nn.Module):
         num_layers=8,
         num_heads=8,
         dropout=0.1,
-        attention_type="mmdit",  # Options: "vanilla", "flash", "mmdit"
+        attention_type="flash",  # Options: "vanilla", "flash", "mmdit"
         **kwargs
     ):
         super().__init__()
@@ -74,7 +74,7 @@ class InterFlowNet_Duet(nn.Module):
         if attention_type == "vanilla":
             for i in range(num_layers):
                 self.blocks.append(
-                    VanillaCustomizedBlock(
+                    VanillaDuetBlock(
                         latent_dim=latent_dim,
                         num_heads=num_heads,
                         dropout=dropout,
@@ -84,7 +84,7 @@ class InterFlowNet_Duet(nn.Module):
         elif attention_type == "flash":
             for i in range(num_layers):
                 self.blocks.append(
-                    FlashCustomizedBlock(
+                    FlashDuetBlock(
                         latent_dim=latent_dim,
                         num_heads=num_heads,
                         dropout=dropout,

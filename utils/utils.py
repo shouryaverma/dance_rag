@@ -86,7 +86,6 @@ def rigid_transform(relative, data):
 
     return data
 
-
 class MotionNormalizer():
     def __init__(self):
         mean = np.load("./data/global_mean.npy")
@@ -103,8 +102,6 @@ class MotionNormalizer():
     def backward(self, x):
         x = x * self.motion_std + self.motion_mean
         return x
-
-
 
 class MotionNormalizerTorch():
     def __init__(self):

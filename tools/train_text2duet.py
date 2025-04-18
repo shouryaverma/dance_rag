@@ -182,6 +182,8 @@ class LitTrainModel(pl.LightningModule):
 def build_models(cfg):
     if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
+    elif cfg.NAME == "ReactModel":
+        model = ReactModel(cfg)
     else:
         raise NotImplementedError
     return model

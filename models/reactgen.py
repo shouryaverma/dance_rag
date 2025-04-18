@@ -5,20 +5,18 @@ from utils.utils import *
 from models.utils import *
 from models.blocks import *
 from models.flow_matching import *
-from models.flow_nets import *
+from models.flow_nets_react import *
 from models.nets import *
 
-class DuetModel(nn.Module):
+class ReactModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.decoder = InterFlowMatching_Duet(cfg)
-        # self.decoder = InterDiffusion_Duet(cfg, sampling_strategy=cfg.STRATEGY)
+        self.decoder = InterFlowMatching_React(cfg)
         
         # Load CLIP model more efficiently
         try:
             clip_model, _ = clip.load("ViT-L/14@336px", device="cpu", jit=False)
-            # clip_model, _ = clip.load("ViT-L/14@336px", device="cpu", jit=False, download_root='/scratch/gilbreth/gupta596/MotionGen/Text2DanceAcc/dance/checkpoints')
             
             # Extract required components
             self.token_embedding = clip_model.token_embedding
@@ -59,13 +57,13 @@ class DuetModel(nn.Module):
         self._token_cache = {}
     
     def compute_loss(self, batch):
-        """Compute training loss"""
+        """Compute training loss for reactive dancing"""
         batch = self.text_process(batch)
         losses = self.decoder.compute_loss(batch)
         return losses["total"], losses
     
     def decode_motion(self, batch):
-        """Generate motion sequence"""
+        """Generate follower motion sequence based on lead dancer and music"""
         batch.update(self.decoder(batch))
         return batch
     

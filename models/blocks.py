@@ -1,6 +1,5 @@
 from .layers import *
 from .flash_layers import *
-from .mmdit.mmdit_generalized_pytorch import MMDiT
 
 class TransformerBlock(nn.Module):
     def __init__(self,
@@ -59,29 +58,7 @@ class DoubleTransformerBlock(nn.Module):
         out = out + h3
         return out
 
-# class MMDiTBlock(nn.Module):
-#     def __init__(self, latent_dim=512, **kwargs):
-#         super().__init__()
-#         self.mmdit = MMDiT(
-#             depth=1,
-#             dim_modalities=(latent_dim, latent_dim, latent_dim),
-#             dim_cond=latent_dim,
-#             qk_rmsnorm=True,
-#         )
-
-#     def forward(self, x, y, music, emb=None, key_padding_mask=None):
-#         modality_tokens = (x, y, music)
-#         modality_masks = (key_padding_mask, key_padding_mask, key_padding_mask)
-
-#         x_out, y_out, music_out = self.mmdit(
-#             modality_tokens=modality_tokens,
-#             modality_masks=modality_masks,
-#             time_cond=emb
-#         )
-
-#         return x_out, y_out, music_out
-
-class VanillaCustomBlock(nn.Module):
+class VanillaDuetcustomBlock(nn.Module):
     def __init__(
         self,
         latent_dim=512,
@@ -144,7 +121,7 @@ class VanillaCustomBlock(nn.Module):
         
         return x_final, y_final, music
     
-class VanillaCustomizedBlock(nn.Module):
+class VanillaDuetBlock(nn.Module):
     def __init__(
         self, 
         latent_dim=512, 
@@ -154,7 +131,7 @@ class VanillaCustomizedBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
-        self.custom_block = VanillaCustomBlock(
+        self.custom_block = VanillaDuetcustomBlock(
             latent_dim=latent_dim,
             num_heads=num_heads,
             ff_size=ff_size,
@@ -165,8 +142,8 @@ class VanillaCustomizedBlock(nn.Module):
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
         return self.custom_block(x, y, music, emb, key_padding_mask)
 
-class FlashCustomBlock(nn.Module):
-    """Enhanced version of CustomBlock using Flash Attention"""
+class FlashDuetcustomBlock(nn.Module):
+    """using Flash Attention for duet dancing"""
     def __init__(
         self,
         latent_dim=512,
@@ -228,8 +205,8 @@ class FlashCustomBlock(nn.Module):
        
         return x_final, y_final, music
 
-class FlashCustomizedBlock(nn.Module):
-    """Wrapper for FlashCustomBlock"""
+class FlashDuetBlock(nn.Module):
+    """Wrapper for FlashDuetBlock"""
     def __init__(
         self,
         latent_dim=512,
@@ -239,7 +216,7 @@ class FlashCustomizedBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
-        self.custom_block = FlashCustomBlock(
+        self.custom_block = FlashDuetcustomBlock(
             latent_dim=latent_dim,
             num_heads=num_heads,
             ff_size=ff_size,
@@ -249,3 +226,73 @@ class FlashCustomizedBlock(nn.Module):
        
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
         return self.custom_block(x, y, music, emb, key_padding_mask)
+    
+class FlashReactcustomBlock(nn.Module):
+    """using Flash Attention for reactive following"""
+    def __init__(
+        self,
+        latent_dim=512,
+        num_heads=8,
+        ff_size=1024,
+        dropout=0.1,
+        **kwargs
+    ):
+        super().__init__()
+       
+        # Follower self-attention with Flash Attention
+        self.follower_self_attn = FlashSelfAttention(latent_dim, num_heads, dropout)
+        self.follower_norm1 = nn.LayerNorm(latent_dim)
+       
+        # Cross-attention: music → follower with Flash Attention
+        self.music_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.follower_norm2 = nn.LayerNorm(latent_dim)
+       
+        # Cross-attention: lead → follower with Flash Attention (one-way influence)
+        self.lead_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.follower_norm3 = nn.LayerNorm(latent_dim)
+       
+        # Feedforward network for follower
+        self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.follower_norm4 = nn.LayerNorm(latent_dim)
+       
+    def forward(self, follower, lead, music, emb=None, key_padding_mask=None):
+        # Process follower with self-attention
+        follower_norm1 = self.follower_norm1(follower)
+        follower_self = follower + self.follower_self_attn(follower_norm1, emb, key_padding_mask)
+       
+        # Apply music conditioning to follower
+        follower_norm2 = self.follower_norm2(follower_self)
+        follower_music = follower_self + self.music_to_follower_attn(follower_norm2, music, emb, key_padding_mask)
+       
+        # Lead dancer influences follower (one-way)
+        follower_norm3 = self.follower_norm3(follower_music)
+        follower_react = follower_music + self.lead_to_follower_attn(follower_norm3, lead, emb, key_padding_mask)
+       
+        # Apply feedforward network to follower
+        follower_norm4 = self.follower_norm4(follower_react)
+        follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
+       
+        # Return the updated follower state, keeping lead and music unchanged
+        return follower_final, lead, music
+
+class FlashReactBlock(nn.Module):
+    """Wrapper for FlashReactBlock"""
+    def __init__(
+        self,
+        latent_dim=512,
+        num_heads=8,
+        ff_size=1024,
+        dropout=0.1,
+        **kwargs
+    ):
+        super().__init__()
+        self.custom_block = FlashReactcustomBlock(
+            latent_dim=latent_dim,
+            num_heads=num_heads,
+            ff_size=ff_size,
+            dropout=dropout,
+            **kwargs
+        )
+       
+    def forward(self, follower, lead, music, emb=None, key_padding_mask=None):
+        return self.custom_block(follower, lead, music, emb, key_padding_mask)

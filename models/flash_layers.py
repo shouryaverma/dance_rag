@@ -1,4 +1,4 @@
-from utils import *
+from .utils import *
 from torch import nn
 
 class AdaLN(nn.Module):

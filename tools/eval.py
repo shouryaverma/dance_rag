@@ -22,12 +22,8 @@ os.environ['MASTER_PORT'] = '12345'
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 def build_models(cfg):
-    if cfg.NAME == "InterGen":
-        model = InterGen(cfg)
-    elif cfg.NAME == "DuetModel":
+    if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
-    elif cfg.NAME == "MDMModel":
-        model = DuetModelMDM(cfg)
     else:
         raise NotImplementedError
     return model
