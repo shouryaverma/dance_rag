@@ -6,5 +6,4 @@ venv
 evaluation_*
 cache
 eval_model
-*.log
-*.out
+output.log
