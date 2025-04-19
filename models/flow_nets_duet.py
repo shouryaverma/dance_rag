@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 from models.utils import *
 from models.blocks import *
-from models.blocksmm import *
+from models.flow_blocks import *
 from models.flow_matching import RectifiedFlow, FlowType
 
-class InterFlowNet_Duet(nn.Module):
+class FlowNet_Duet(nn.Module):
     """
     Flow network for interactive duet motion generation.
     Predicts the velocity fields for rectified flow.
@@ -19,7 +19,7 @@ class InterFlowNet_Duet(nn.Module):
         num_layers=8,
         num_heads=8,
         dropout=0.1,
-        attention_type="flash",  # Options: "vanilla", "flash", "mmdit"
+        attention_type="flash",  # Options: "vanilla", "flash"
         **kwargs
     ):
         super().__init__()
@@ -89,17 +89,6 @@ class InterFlowNet_Duet(nn.Module):
                         num_heads=num_heads,
                         dropout=dropout,
                         ff_size=ff_size
-                    )
-                )
-        elif attention_type == "mmdit":
-            for i in range(num_layers):
-                self.blocks.append(
-                    MMDiTDancerBlockAdvanced(
-                        latent_dim=latent_dim,
-                        num_heads=num_heads,
-                        dropout=dropout,
-                        ff_size=ff_size,
-                        num_residual_streams=4  # Try different values
                     )
                 )
         else:
@@ -181,7 +170,7 @@ class InterFlowNet_Duet(nn.Module):
         
         return output
 
-class InterFlowMatching_Duet(nn.Module):
+class FlowMatching_Duet(nn.Module):
     """
     Rectified Flow Matching model for duet motion generation.
     This is the main class that integrates the flow model with the denoising network.
@@ -199,7 +188,7 @@ class InterFlowMatching_Duet(nn.Module):
         self.motion_rep = cfg.MOTION_REP
         
         # Create the velocity field prediction network
-        self.net = InterFlowNet_Duet(
+        self.net = FlowNet_Duet(
             self.nfeats,
             self.latent_dim,
             ff_size=self.ff_size,

@@ -4,15 +4,17 @@ from torch import nn
 from utils.utils import *
 from models.utils import *
 from models.blocks import *
+from models.nets import *
+
+from models.flow_blocks import *
 from models.flow_matching import *
 from models.flow_nets_duet import *
-from models.nets import *
 
 class DuetModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.decoder = InterFlowMatching_Duet(cfg)
+        self.decoder = FlowMatching_Duet(cfg)
         # self.decoder = InterDiffusion_Duet(cfg, sampling_strategy=cfg.STRATEGY)
         
         # Load CLIP model more efficiently

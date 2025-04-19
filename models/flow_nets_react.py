@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 from models.utils import *
 from models.blocks import *
-from models.blocksmm import *
+from models.flow_blocks import *
 from models.flow_matching import RectifiedFlow, FlowType
 
-class InterFlowNet_React(nn.Module):
+class FlowNet_React(nn.Module):
     """
     Flow network for reactive follower motion generation.
     Predicts the velocity fields for rectified flow.
@@ -136,7 +136,7 @@ class InterFlowNet_React(nn.Module):
         
         return output
 
-class InterFlowMatching_React(nn.Module):
+class FlowMatching_React(nn.Module):
     """
     Rectified Flow Matching model for duet motion generation.
     This is the main class that integrates the flow model with the denoising network.
@@ -154,7 +154,7 @@ class InterFlowMatching_React(nn.Module):
         self.motion_rep = cfg.MOTION_REP
         
         # Create the velocity field prediction network
-        self.net = InterFlowNet_React(
+        self.net = FlowNet_React(
             self.nfeats,
             self.latent_dim,
             ff_size=self.ff_size,

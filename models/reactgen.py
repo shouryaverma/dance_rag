@@ -12,7 +12,7 @@ class ReactModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.decoder = InterFlowMatching_React(cfg)
+        self.decoder = FlowMatching_React(cfg)
         
         # Load CLIP model more efficiently
         try:
