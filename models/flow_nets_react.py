@@ -60,7 +60,17 @@ class FlowNet_React(nn.Module):
         self.blocks = nn.ModuleList()
         
         # Choose block type based on attention_type
-        if attention_type == "flash":
+        if attention_type == "vanilla":
+            for i in range(num_layers):
+                self.blocks.append(
+                    VanillaReactBlock(
+                        latent_dim=latent_dim,
+                        num_heads=num_heads,
+                        dropout=dropout,
+                        ff_size=ff_size
+                    )
+                )
+        elif attention_type == "flash":
             for i in range(num_layers):
                 self.blocks.append(
                     FlashReactBlock(
@@ -177,8 +187,6 @@ class FlowMatching_React(nn.Module):
         Compute training loss
         """
         x_start = batch["motions"]
-
-        print("Batch shape:", batch["motions"].shape)
         
         B = x_start.shape[0]
         cond = batch.get("cond", None)
@@ -231,16 +239,69 @@ class FlowMatching_React(nn.Module):
         B = cond.shape[0]
         T = batch["motion_lens"][0]
         
-        # Sample from the flow model
-        output = self.flow.sample(
-            model=self.net,
-            shape=(B, T, self.nfeats*2),
-            model_kwargs={
-                "mask": None,
-                "cond": cond,
-                "music": batch["music"][:, :T]
-            },
-            progress=True
-        )
+        # For reactive dancing, we need to use the lead dancer's motion
+        if "lead_motion" in batch:
+            # Extract lead dancer's motion and ensure float32 dtype
+            lead_motion = batch["lead_motion"].to(torch.float32)
+            
+            # Ensure lead_motion has the right sequence length
+            if lead_motion.shape[1] != T:
+                lead_motion = lead_motion[:, :T]
+            
+            # Get feature dimension explicitly
+            D = lead_motion.shape[2]
+            
+            # Reshape and normalize if needed
+            if self.motion_rep == "global":
+                # Instead of using -1, explicitly provide the feature dimension
+                lead_motion_reshaped = lead_motion.reshape(B, T, 1, D)
+                lead_motion_norm = self.flow.normalizer.forward(lead_motion_reshaped)
+                lead_motion_flat = lead_motion_norm.reshape(B, T, -1)
+            else:
+                lead_motion_flat = lead_motion
+            
+            # Generate follower motion with half the feature dimension
+            follower_shape = (B, T, self.nfeats)
+            
+            # Get initial noise for follower (with explicit float32 dtype)
+            device = cond.device
+            follower_noise = self.flow.sample_noise(follower_shape, device).to(torch.float32)
+            
+            # Construct initial combined state with real lead motion and noisy follower
+            initial_x = torch.cat([lead_motion_flat, follower_noise], dim=-1)
+            
+            # Sample from the flow model
+            output = self.flow.sample(
+                model=self.net,
+                shape=(B, T, self.nfeats*2),
+                noise=initial_x,  # Use our custom initial state
+                model_kwargs={
+                    "mask": None,
+                    "cond": cond,
+                    "music": batch["music"][:, :T]
+                },
+                progress=True
+            )
+            
+            # Extract only the follower part from the result and recombine with original lead
+            if self.motion_rep == "global":
+                # Re-normalize lead motion to match output format
+                output_reshaped = output.reshape(B, T, 2, -1)
+                # Replace lead dancer part with the original lead
+                output_reshaped[:, :, 0, :] = lead_motion_norm.squeeze(2)
+                # Reshape back to flat format
+                output = output_reshaped.reshape(B, T, -1)
+        else:
+            # Original duet generation case
+            output = self.flow.sample(
+                model=self.net,
+                shape=(B, T, self.nfeats*2),
+                model_kwargs={
+                    "mask": None,
+                    "cond": cond,
+                    "music": batch["music"][:, :T]
+                },
+                progress=True
+            )
         
         return {"output": output}

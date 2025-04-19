@@ -19,10 +19,11 @@ torch.set_float32_matmul_precision('medium')
 from utils.plot_script import *
 
 class LitTrainModel(pl.LightningModule):
-    def __init__(self, model, cfg):
+    def __init__(self, model, train_cfg, model_cfg):
         super().__init__()
         # cfg init
-        self.cfg = cfg
+        self.cfg = train_cfg
+        self.model_cfg = model_cfg
         self.automatic_optimization = False
         self.save_root = pjoin(self.cfg.GENERAL.CHECKPOINT, self.cfg.GENERAL.EXP_NAME)
         self.model_dir = pjoin(self.save_root, 'model')
@@ -68,11 +69,18 @@ class LitTrainModel(pl.LightningModule):
 
     def text_length_to_motion_torch(self, text, music, length):
         # text: 1,*
-        # length: 1, 
+        # length: 1,
         input_batch = {}
         input_batch["text"] = text
         input_batch["music"] = music
         input_batch["motion_lens"] = length
+        # For ReactModel, we need the lead dancer's motion from the test batch
+        if self.model_cfg.NAME == "ReactModel":
+            # During inference, we'll use ground truth leader motion from the test batch
+            # This assumes the lead motion is passed in the batch from sample_text
+            if hasattr(self, '_temp_lead_motion'):
+                input_batch["lead_motion"] = self._temp_lead_motion
+                delattr(self, '_temp_lead_motion')  # Clean up after use
         output_batch = self.model.forward_test(input_batch)
         motions_output = output_batch["output"].reshape(output_batch["output"].shape[0], output_batch["output"].shape[1], 2, -1)
         motions_output = self.normalizerTorch.backward(motions_output.detach())
@@ -81,19 +89,39 @@ class LitTrainModel(pl.LightningModule):
     def sample_text(self, batch_data, batch_idx, mode):
         motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
             batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
-        # cond + T
-        # generate one sample or two
-        motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
-
-        # B, T, 2, 262
-        # visualize the 
-        self.plot_motion_intergen(motion1[0], motion2[0], 
-                        motion_lens[0], self.vis_dir, text[0],
-                        mode = mode, motion = 'gt', idx = batch_idx)
         
-        self.plot_motion_intergen(motion_gen_1[0], motion_gen_2[0], 
-                        motion_lens[0], self.vis_dir, text[0],
-                        mode = mode, motion = 'gen', idx = batch_idx)
+        if self.model_cfg.NAME == "DuetModel":
+            # Duet dancing: generate both dancer motions simultaneously
+            motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
+            
+            # Visualize ground truth
+            self.plot_motion_intergen(motion1[0], motion2[0], 
+                            motion_lens[0], self.vis_dir, text[0],
+                            mode=mode, motion='gt', idx=batch_idx)
+            
+            # Visualize generated motions
+            self.plot_motion_intergen(motion_gen_1[0], motion_gen_2[0], 
+                            motion_lens[0], self.vis_dir, text[0],
+                            mode=mode, motion='gen', idx=batch_idx)
+        
+        elif self.model_cfg.NAME == "ReactModel":
+            # Reactive dancing: use ground truth leader (motion1) and generate follower (motion2)
+            
+            # Store lead motion temporarily for the text_length_to_motion_torch function
+            self._temp_lead_motion = motion1[0:1]
+            
+            # Generate only the follower's motion
+            _, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
+            
+            # Visualize ground truth
+            self.plot_motion_intergen(motion1[0], motion2[0], 
+                            motion_lens[0], self.vis_dir, text[0],
+                            mode=mode, motion='gt', idx=batch_idx)
+            
+            # Visualize leader (ground truth) with generated follower
+            self.plot_motion_intergen(motion1[0], motion_gen_follower[0], 
+                            motion_lens[0], self.vis_dir, text[0],
+                            mode=mode, motion='gen', idx=batch_idx)
         
     def forward(self, batch_data):
         motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
@@ -109,6 +137,10 @@ class LitTrainModel(pl.LightningModule):
         batch["music"] = music
         batch["motions"] = motions.reshape(B, T, -1).type(torch.float32)
         batch["motion_lens"] = motion_lens.long()
+        # For ReactModel, add leader's motion as input
+        if self.model_cfg.NAME == "ReactModel":
+            # For reactive dancing, motion1 is considered the leader
+            batch["lead_motion"] = motion1
 
         loss, loss_logs = self.model(batch)
         return loss, loss_logs
@@ -222,7 +254,7 @@ if __name__ == '__main__':
     print(f"Total parameters: {total_params}")
     print(f"Trainable parameters: {trainable_params}")
 
-    litmodel = LitTrainModel(model, train_cfg)
+    litmodel = LitTrainModel(model, train_cfg, model_cfg)
 
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=litmodel.model_dir,
