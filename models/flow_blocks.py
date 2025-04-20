@@ -333,7 +333,7 @@ class MultiScaleFlashReactBlock(nn.Module):
         follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
        
         # Return the updated follower state, keeping lead and music
-        return follower_final, lead, music
+        return lead, follower_final, music
 
 class FlashReactBlock(nn.Module):
     """Wrapper for MultiScaleFlashReactBlock"""
