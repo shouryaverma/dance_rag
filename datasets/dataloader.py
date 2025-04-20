@@ -120,8 +120,6 @@ def build_dataloader(dataset: Dataset,
         persistent_workers=persistent_workers,
         **kwargs)
 
-
-
     return data_loader
 
 

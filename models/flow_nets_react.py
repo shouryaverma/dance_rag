@@ -19,7 +19,7 @@ class FlowNet_React(nn.Module):
         num_layers=8,
         num_heads=8,
         dropout=0.1,
-        attention_type="flash",  # Default to flash attention
+        attention_type="flash",  # Options: "vanilla", "flash"
         **kwargs
     ):
         super().__init__()

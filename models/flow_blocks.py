@@ -13,6 +13,16 @@ class VanillaDuetcustomBlock(nn.Module):
     ):
         super().__init__()
         
+        # Temporal modeling with 3 temporal convolutions at different scales
+        self.temporal_conv1 = nn.Conv1d(latent_dim, latent_dim, kernel_size=3, padding=1, groups=4)
+        self.temporal_conv2 = nn.Conv1d(latent_dim, latent_dim, kernel_size=5, padding=2, groups=4)
+        self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
+        
+        # Gates to control the influence of each temporal scale
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+        
         # Dancer self-attention
         self.dancer_a_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
         self.dancer_b_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
@@ -38,6 +48,25 @@ class VanillaDuetcustomBlock(nn.Module):
         self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
         
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
+        
+        # Apply multi-scale temporal convolutions
+        x_a = x.transpose(1, 2)  # B, T, D → B, D, T
+        x_a_temporal_feats1 = self.temporal_conv1(x_a).transpose(1, 2)  # Back to B, T, D
+        x_a_temporal_feats2 = self.temporal_conv2(x_a).transpose(1, 2)  # Back to B, T, D
+        x_a_temporal_feats3 = self.temporal_conv3(x_a).transpose(1, 2)  # Back to B, T, D
+
+        x = x + self.temporal_gate1 * x_a_temporal_feats1 + \
+                self.temporal_gate2 * x_a_temporal_feats2 + \
+                self.temporal_gate3 * x_a_temporal_feats3   
+        
+        y_b = y.transpose(1, 2)  # B, T, D → B, D, T
+        y_b_temporal_feats1 = self.temporal_conv1(y_b).transpose(1, 2)  # Back to B, T, D
+        y_b_temporal_feats2 = self.temporal_conv2(y_b).transpose(1, 2)  # Back to B, T, D
+        y_b_temporal_feats3 = self.temporal_conv3(y_b).transpose(1, 2)  # Back to B, T, D
+
+        y = y + self.temporal_gate1 * y_b_temporal_feats1 + \
+                self.temporal_gate2 * y_b_temporal_feats2 + \
+                self.temporal_gate3 * y_b_temporal_feats3
         
         # Process dancers with self-attention
         x_norm1 = self.dancer_a_norm1(x)
@@ -97,6 +126,16 @@ class FlashDuetcustomBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
+
+        # Temporal modeling with 3 temporal convolutions at different scales
+        self.temporal_conv1 = nn.Conv1d(latent_dim, latent_dim, kernel_size=3, padding=1, groups=4)
+        self.temporal_conv2 = nn.Conv1d(latent_dim, latent_dim, kernel_size=5, padding=2, groups=4)
+        self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
+        
+        # Gates to control the influence of each temporal scale
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
        
         # Dancer self-attention with Flash Attention
         self.dancer_a_self_attn = FlashSelfAttention(latent_dim, num_heads, dropout)
@@ -123,6 +162,26 @@ class FlashDuetcustomBlock(nn.Module):
         self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
        
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
+
+        # Apply multi-scale temporal convolutions
+        x_a = x.transpose(1, 2)  # B, T, D → B, D, T
+        x_a_temporal_feats1 = self.temporal_conv1(x_a).transpose(1, 2)  # Back to B, T, D
+        x_a_temporal_feats2 = self.temporal_conv2(x_a).transpose(1, 2)  # Back to B, T, D
+        x_a_temporal_feats3 = self.temporal_conv3(x_a).transpose(1, 2)  # Back to B, T, D
+
+        x = x + self.temporal_gate1 * x_a_temporal_feats1 + \
+                self.temporal_gate2 * x_a_temporal_feats2 + \
+                self.temporal_gate3 * x_a_temporal_feats3   
+        
+        y_b = y.transpose(1, 2)  # B, T, D → B, D, T
+        y_b_temporal_feats1 = self.temporal_conv1(y_b).transpose(1, 2)  # Back to B, T, D
+        y_b_temporal_feats2 = self.temporal_conv2(y_b).transpose(1, 2)  # Back to B, T, D
+        y_b_temporal_feats3 = self.temporal_conv3(y_b).transpose(1, 2)  # Back to B, T, D
+
+        y = y + self.temporal_gate1 * y_b_temporal_feats1 + \
+                self.temporal_gate2 * y_b_temporal_feats2 + \
+                self.temporal_gate3 * y_b_temporal_feats3
+        
         # Process dancers with self-attention
         x_norm1 = self.dancer_a_norm1(x)
         y_norm1 = self.dancer_b_norm1(y)
@@ -183,7 +242,7 @@ class MultiScaleVanillaReactBlock(nn.Module):
     ):
         super().__init__()
         
-		# Temporal modeling with 3 temporal convolutions at different scales
+        # Temporal modeling with 3 temporal convolutions at different scales
         self.temporal_conv1 = nn.Conv1d(latent_dim, latent_dim, kernel_size=3, padding=1, groups=4)
         self.temporal_conv2 = nn.Conv1d(latent_dim, latent_dim, kernel_size=5, padding=2, groups=4)
         self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
@@ -240,7 +299,7 @@ class MultiScaleVanillaReactBlock(nn.Module):
         follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
        
         # Return the updated follower state, keeping lead and music unchanged
-        return follower_final, lead, music
+        return lead, follower_final, music
 
 class VanillaReactBlock(nn.Module):
     """Wrapper for MultiScaleVanillaReactBlock"""
@@ -295,7 +354,7 @@ class MultiScaleFlashReactBlock(nn.Module):
         self.follower_norm2 = nn.LayerNorm(latent_dim)
        
         # Gated cross-attention: lead → follower with Flash Attention
-        self.lead_to_follower_attn = GatedFlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.lead_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.follower_norm3 = nn.LayerNorm(latent_dim)
        
         # Feedforward network for follower
@@ -356,30 +415,3 @@ class FlashReactBlock(nn.Module):
         
     def forward(self, follower, lead, music, emb=None, key_padding_mask=None):
         return self.custom_block(follower, lead, music, emb, key_padding_mask)
-
-class GatedFlashCrossAttention(nn.Module):
-    """Cross-attention with gating mechanism to control information flow"""
-    def __init__(self, latent_dim, xf_latent_dim, num_heads, dropout, embed_dim=None):
-        super().__init__()
-        # Base cross-attention
-        self.cross_attn = FlashCrossAttention(latent_dim, xf_latent_dim, num_heads, dropout, embed_dim)
-        
-        # Gating mechanism to control influence
-        self.gate = nn.Sequential(
-            nn.Linear(latent_dim, latent_dim//2),
-            nn.GELU(),
-            nn.Linear(latent_dim//2, latent_dim),
-            nn.Sigmoid()
-        )
-        
-    def forward(self, x, xf, emb, key_padding_mask=None):
-        # Standard cross-attention output
-        attn_output = self.cross_attn(x, xf, emb, key_padding_mask)
-        
-        # Compute gates based on query features
-        gate_values = self.gate(x)
-        
-        # Apply gates to attention output (element-wise multiplication)
-        gated_output = gate_values * attn_output
-        
-        return gated_output
