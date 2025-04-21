@@ -354,8 +354,8 @@ class VanillaReactBlock(nn.Module):
             **kwargs
         )
        
-    def forward(self, follower, lead, music, emb=None, key_padding_mask=None):
-        return self.custom_block(follower, lead, music, emb, key_padding_mask)
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
+        return self.custom_block(lead, follower, music, emb, key_padding_mask)
 
 class MultiScaleFlashReactBlock(nn.Module):
     """MultiScale Flash Attention for reactive following with multi-resolution temporal modeling"""
@@ -455,5 +455,5 @@ class FlashReactBlock(nn.Module):
             **kwargs
         )
         
-    def forward(self, follower, lead, music, emb=None, key_padding_mask=None):
-        return self.custom_block(follower, lead, music, emb, key_padding_mask)
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
+        return self.custom_block(lead, follower, music, emb, key_padding_mask)
