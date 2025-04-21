@@ -41,6 +41,10 @@ class FlowNet_React(nn.Module):
         self.motion_embed = nn.Linear(self.input_feats, self.latent_dim)
         self.text_embed = nn.Linear(self.text_emb_dim, self.latent_dim)
         self.music_embed = nn.Linear(self.music_emb_dim, self.latent_dim)
+
+        # Look ahead transformer
+        self.leader_look_ahead = LookAheadTransformer(
+            latent_dim, num_heads, dropout, look_ahead_window=10)
         
         # Music transformer
         musicTransEncoderLayer = nn.TransformerEncoderLayer(
@@ -111,7 +115,9 @@ class FlowNet_React(nn.Module):
         
         # Embed motions for both dancers
         a_emb = self.motion_embed(x_a)
+        a_emb = self.leader_look_ahead(a_emb)
         b_emb = self.motion_embed(x_b)
+        
         h_a_prev = self.sequence_pos_encoder(a_emb)
         h_b_prev = self.sequence_pos_encoder(b_emb)
         

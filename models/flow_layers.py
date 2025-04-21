@@ -237,3 +237,54 @@ class FlashCrossAttention(nn.Module):
         
         output = self.out_proj(attn_output)
         return output
+    
+class LookAheadTransformer(nn.Module):
+    """
+    Transformer module that processes leader's future movements to enhance follower predictions.
+    """
+    def __init__(self, latent_dim, num_heads, dropout, look_ahead_window=10):
+        super().__init__()
+        self.look_ahead_window = look_ahead_window
+        
+        # Self-attention layers for leader sequence
+        self.self_attn = nn.MultiheadAttention(
+            latent_dim, num_heads, dropout=dropout, batch_first=True
+        )
+        
+        # Layer norm and feed-forward
+        self.norm1 = nn.LayerNorm(latent_dim)
+        self.ff = nn.Sequential(
+            nn.Linear(latent_dim, latent_dim * 4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(latent_dim * 4, latent_dim),
+            nn.Dropout(dropout)
+        )
+        self.norm2 = nn.LayerNorm(latent_dim)
+        
+    def forward(self, x, mask=None):
+        """
+        Process sequence with look-ahead attention.
+        
+        Args:
+            x: Input sequence [B, T, D]
+            mask: Optional attention mask
+        """
+        # Create look-ahead attention mask if none provided
+        if mask is None:
+            # Allow each position to attend to itself and look_ahead_window future positions
+            seq_len = x.shape[1]
+            look_ahead_mask = torch.ones(seq_len, seq_len, device=x.device).tril(diagonal=self.look_ahead_window)
+            mask = look_ahead_mask == 0
+        
+        # Self-attention with look-ahead
+        attn_output, _ = self.self_attn(
+            self.norm1(x), self.norm1(x), self.norm1(x), 
+            attn_mask=mask
+        )
+        x = x + attn_output
+        
+        # Feed-forward
+        x = x + self.ff(self.norm2(x))
+        
+        return x

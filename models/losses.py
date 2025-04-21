@@ -134,8 +134,6 @@ class InterLoss(nn.Module):
         self.losses["total"] = loss
         return self.losses
 
-
-
 class GeometricLoss(nn.Module):
     def __init__(self, recons_loss, nb_joints, name):
         super(GeometricLoss, self).__init__()

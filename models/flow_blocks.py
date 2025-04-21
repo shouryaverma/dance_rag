@@ -19,9 +19,9 @@ class VanillaDuetcustomBlock(nn.Module):
         self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
         
         # Gates to control the influence of each temporal scale
-        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.4)
 
         # Gelu activation function
         self.gelu = nn.GELU()
@@ -146,9 +146,9 @@ class FlashDuetcustomBlock(nn.Module):
         self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
         
         # Gates to control the influence of each temporal scale
-        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.4)
 
         # Gelu activation function
         self.gelu = nn.GELU()
@@ -274,9 +274,9 @@ class MultiScaleVanillaReactBlock(nn.Module):
         self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
         
         # Gates to control the influence of each temporal scale
-        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.4)
 
         # Gelu activation function
         self.gelu = nn.GELU()
@@ -375,9 +375,9 @@ class MultiScaleFlashReactBlock(nn.Module):
         self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=7, padding=3, groups=4)
         
         # Gates to control the influence of each temporal scale
-        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
-        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.4)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.4)
         
         # Gelu activation function
         self.gelu = nn.GELU()
