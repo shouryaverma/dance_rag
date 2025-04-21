@@ -22,6 +22,9 @@ class VanillaDuetcustomBlock(nn.Module):
         self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+
+        # Gelu activation function
+        self.gelu = nn.GELU()
         
         # Dancer self-attention
         self.dancer_a_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
@@ -55,6 +58,11 @@ class VanillaDuetcustomBlock(nn.Module):
         x_a_temporal_feats2 = self.temporal_conv2(x_a).transpose(1, 2)  # Back to B, T, D
         x_a_temporal_feats3 = self.temporal_conv3(x_a).transpose(1, 2)  # Back to B, T, D
 
+        # gelu activation
+        x_a_temporal_feats1 = self.gelu(x_a_temporal_feats1)
+        x_a_temporal_feats2 = self.gelu(x_a_temporal_feats2)
+        x_a_temporal_feats3 = self.gelu(x_a_temporal_feats3)
+
         x = x + self.temporal_gate1 * x_a_temporal_feats1 + \
                 self.temporal_gate2 * x_a_temporal_feats2 + \
                 self.temporal_gate3 * x_a_temporal_feats3   
@@ -63,6 +71,11 @@ class VanillaDuetcustomBlock(nn.Module):
         y_b_temporal_feats1 = self.temporal_conv1(y_b).transpose(1, 2)  # Back to B, T, D
         y_b_temporal_feats2 = self.temporal_conv2(y_b).transpose(1, 2)  # Back to B, T, D
         y_b_temporal_feats3 = self.temporal_conv3(y_b).transpose(1, 2)  # Back to B, T, D
+
+        # gelu activation
+        y_b_temporal_feats1 = self.gelu(y_b_temporal_feats1)
+        y_b_temporal_feats2 = self.gelu(y_b_temporal_feats2)
+        y_b_temporal_feats3 = self.gelu(y_b_temporal_feats3)
 
         y = y + self.temporal_gate1 * y_b_temporal_feats1 + \
                 self.temporal_gate2 * y_b_temporal_feats2 + \
@@ -136,6 +149,9 @@ class FlashDuetcustomBlock(nn.Module):
         self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+
+        # Gelu activation function
+        self.gelu = nn.GELU()
        
         # Dancer self-attention with Flash Attention
         self.dancer_a_self_attn = FlashSelfAttention(latent_dim, num_heads, dropout)
@@ -169,6 +185,11 @@ class FlashDuetcustomBlock(nn.Module):
         x_a_temporal_feats2 = self.temporal_conv2(x_a).transpose(1, 2)  # Back to B, T, D
         x_a_temporal_feats3 = self.temporal_conv3(x_a).transpose(1, 2)  # Back to B, T, D
 
+        # gelu activation
+        x_a_temporal_feats1 = self.gelu(x_a_temporal_feats1)
+        x_a_temporal_feats2 = self.gelu(x_a_temporal_feats2)
+        x_a_temporal_feats3 = self.gelu(x_a_temporal_feats3)
+
         x = x + self.temporal_gate1 * x_a_temporal_feats1 + \
                 self.temporal_gate2 * x_a_temporal_feats2 + \
                 self.temporal_gate3 * x_a_temporal_feats3   
@@ -177,6 +198,11 @@ class FlashDuetcustomBlock(nn.Module):
         y_b_temporal_feats1 = self.temporal_conv1(y_b).transpose(1, 2)  # Back to B, T, D
         y_b_temporal_feats2 = self.temporal_conv2(y_b).transpose(1, 2)  # Back to B, T, D
         y_b_temporal_feats3 = self.temporal_conv3(y_b).transpose(1, 2)  # Back to B, T, D
+
+        # gelu activation
+        y_b_temporal_feats1 = self.gelu(y_b_temporal_feats1)
+        y_b_temporal_feats2 = self.gelu(y_b_temporal_feats2)
+        y_b_temporal_feats3 = self.gelu(y_b_temporal_feats3)
 
         y = y + self.temporal_gate1 * y_b_temporal_feats1 + \
                 self.temporal_gate2 * y_b_temporal_feats2 + \
@@ -251,6 +277,9 @@ class MultiScaleVanillaReactBlock(nn.Module):
         self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+
+        # Gelu activation function
+        self.gelu = nn.GELU()
        
         # Follower self-attention with Vanilla Attention
         self.follower_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
@@ -276,6 +305,11 @@ class MultiScaleVanillaReactBlock(nn.Module):
         temporal_feats1 = self.temporal_conv1(follower_t).transpose(1, 2)  # Back to B, T, D
         temporal_feats2 = self.temporal_conv2(follower_t).transpose(1, 2)  # Back to B, T, D
         temporal_feats3 = self.temporal_conv3(follower_t).transpose(1, 2)  # Back to B, T, D
+
+        # gelu activation
+        temporal_feats1 = self.gelu(temporal_feats1)
+        temporal_feats2 = self.gelu(temporal_feats2)
+        temporal_feats3 = self.gelu(temporal_feats3)
         
         # Combine with gates
         follower = follower + self.temporal_gate1 * temporal_feats1 + \
@@ -344,6 +378,9 @@ class MultiScaleFlashReactBlock(nn.Module):
         self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
         self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+        
+        # Gelu activation function
+        self.gelu = nn.GELU()
        
         # Follower self-attention with Flash Attention
         self.follower_self_attn = FlashSelfAttention(latent_dim, num_heads, dropout)
@@ -369,6 +406,11 @@ class MultiScaleFlashReactBlock(nn.Module):
         temporal_feats1 = self.temporal_conv1(follower_t).transpose(1, 2)  # Back to B, T, D
         temporal_feats2 = self.temporal_conv2(follower_t).transpose(1, 2)  # Back to B, T, D
         temporal_feats3 = self.temporal_conv3(follower_t).transpose(1, 2)  # Back to B, T, D
+        
+        # gelu activation
+        temporal_feats1 = self.gelu(temporal_feats1)
+        temporal_feats2 = self.gelu(temporal_feats2)
+        temporal_feats3 = self.gelu(temporal_feats3)
         
         # Combine with gates
         follower = follower + self.temporal_gate1 * temporal_feats1 + \
