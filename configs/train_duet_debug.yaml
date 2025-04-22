@@ -16,3 +16,5 @@ TRAIN:
   NUM_WORKERS: 8
   LAST_EPOCH: 0
   LAST_ITER: 0
+
+# nohup python tools/train_text2duet.py > output.log 2>&1 &

@@ -144,12 +144,11 @@ class FlowNet_React(nn.Module):
             music_emb = music_emb_all
         
         # Generate output velocities for both dancers
-        output_a = self.out(h_a_prev)
+        output_a = x_a
         output_b = self.out(h_b_prev)
         
         # Combine outputs
         output = torch.cat([output_a, output_b], dim=-1)
-        
         return output
 
 class FlowMatching_React(nn.Module):

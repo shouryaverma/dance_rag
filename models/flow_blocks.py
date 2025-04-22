@@ -2,7 +2,7 @@ from .flow_layers import *
 from .layers import *
 from .utils import *
 
-class VanillaDuetcustomBlock(nn.Module):
+class MultiScaleVanillaDuetBlock(nn.Module):
     def __init__(
         self,
         latent_dim=512,
@@ -117,7 +117,7 @@ class VanillaDuetBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
-        self.custom_block = VanillaDuetcustomBlock(
+        self.custom_block = MultiScaleVanillaDuetBlock(
             latent_dim=latent_dim,
             num_heads=num_heads,
             ff_size=ff_size,
@@ -128,7 +128,7 @@ class VanillaDuetBlock(nn.Module):
     def forward(self, x, y, music, emb=None, key_padding_mask=None):
         return self.custom_block(x, y, music, emb, key_padding_mask)
 
-class FlashDuetcustomBlock(nn.Module):
+class MultiScaleFlashDuetBlock(nn.Module):
     """using Flash Attention for duet dancing"""
     def __init__(
         self,
@@ -245,7 +245,7 @@ class FlashDuetBlock(nn.Module):
         **kwargs
     ):
         super().__init__()
-        self.custom_block = FlashDuetcustomBlock(
+        self.custom_block = MultiScaleFlashDuetBlock(
             latent_dim=latent_dim,
             num_heads=num_heads,
             ff_size=ff_size,
