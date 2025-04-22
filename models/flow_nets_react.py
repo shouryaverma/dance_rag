@@ -44,7 +44,7 @@ class FlowNet_React(nn.Module):
 
         # Look ahead transformer
         self.leader_look_ahead = LookAheadTransformer(
-            latent_dim, num_heads, dropout, look_ahead_window=10)
+            latent_dim, num_heads, dropout, look_ahead_window=50)
         
         # Music transformer
         musicTransEncoderLayer = nn.TransformerEncoderLayer(
@@ -144,7 +144,7 @@ class FlowNet_React(nn.Module):
             music_emb = music_emb_all
         
         # Generate output velocities for both dancers
-        output_a = x_a
+        output_a = self.out(h_a_prev)
         output_b = self.out(h_b_prev)
         
         # Combine outputs
@@ -214,6 +214,7 @@ class FlowMatching_React(nn.Module):
             mask=mask,
             timestep_mask=timestep_mask,
             t_bar=self.cfg.T_BAR,
+            mode="reactive",
             model_kwargs={
                 "mask": mask,
                 "cond": cond,

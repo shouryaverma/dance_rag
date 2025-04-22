@@ -66,7 +66,7 @@ class RectifiedFlow:
         
         return x_t, noise
     
-    def compute_loss(self, model, x_start, t, mask=None, timestep_mask=None, t_bar=None, model_kwargs=None):
+    def compute_loss(self, model, x_start, t, mask=None, timestep_mask=None, t_bar=None, mode="duet", model_kwargs=None):
         """
         Compute the loss for training the flow model.
         """
@@ -131,7 +131,11 @@ class RectifiedFlow:
             losses.update(loss_a_manager.losses)
             losses.update(loss_b_manager.losses)
             losses.update(interloss_manager.losses)
-            losses["total"] = loss_a_manager.losses["A"] + loss_b_manager.losses["B"] + interloss_manager.losses["total"]
+            if mode=="duet":
+                losses["total"] = loss_a_manager.losses["A"] + loss_b_manager.losses["B"] + interloss_manager.losses["total"]
+            else:
+                losses["total"] = loss_a_manager.losses["A"]*0.001 + loss_b_manager.losses["B"]*1.0 + interloss_manager.losses["total"]
+
         else:
             losses["total"] = simple_loss
         
