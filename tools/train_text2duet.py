@@ -47,26 +47,46 @@ class LitTrainModel(pl.LightningModule):
     def configure_optimizers(self):
         return self._configure_optim()
 
-    def plot_motion_intergen(self, motion1, motion2, length, result_root, caption, mode = 'train', motion = 'recon', idx = 0):
+    # def plot_motion_intergen(self, motion1, motion2, length, result_root, caption, mode = 'train', motion = 'recon', idx = 0):
+    #     # only plot in the main process
+    #     if self.device.index != 0:
+    #         return
+    #     assert motion in ['gen', 'gt', 'recon'], motion
+    #     assert mode in ['train', 'val'], mode
+    #     motion1 = motion1.cpu().numpy()[:length]
+    #     motion2 = motion2.cpu().numpy()[:length]
+    #     mp_data = [motion1, motion2]
+    #     mp_joint = []
+    #     for i, data in enumerate(mp_data):
+    #         if i == 0:
+    #             joint = data[:,:22*3].reshape(-1,22,3)
+    #         else:
+    #             joint = data[:,:22*3].reshape(-1,22,3)
+    #         mp_joint.append(joint)
+
+    #     result_path = Path(result_root) / f"{mode}_{self.current_epoch}_{idx}_{motion}.mp4"
+    #     plot_3d_motion(str(result_path), paramUtil.t2m_kinematic_chain, mp_joint, title=caption, fps=30)
+
+    def plot_motion_intergen(self, gt_motion1, gt_motion2, gen_motion1, gen_motion2, length, result_root, caption, mode='train', idx=0):
         # only plot in the main process
         if self.device.index != 0:
             return
-        assert motion in ['gen', 'gt', 'recon'], motion
-        assert mode in ['train', 'val'], mode
-        motion1 = motion1.cpu().numpy()[:length]
-        motion2 = motion2.cpu().numpy()[:length]
-        mp_data = [motion1, motion2]
+        
+        gt_motion1 = gt_motion1.cpu().numpy()[:length]
+        gt_motion2 = gt_motion2.cpu().numpy()[:length]
+        gen_motion1 = gen_motion1.cpu().numpy()[:length]
+        gen_motion2 = gen_motion2.cpu().numpy()[:length]
+        
+        mp_data = [gt_motion1, gt_motion2, gen_motion1, gen_motion2]
         mp_joint = []
-        for i, data in enumerate(mp_data):
-            if i == 0:
-                joint = data[:,:22*3].reshape(-1,22,3)
-            else:
-                joint = data[:,:22*3].reshape(-1,22,3)
+        
+        for data in mp_data:
+            joint = data[:,:22*3].reshape(-1,22,3)
             mp_joint.append(joint)
 
-        result_path = Path(result_root) / f"{mode}_{self.current_epoch}_{idx}_{motion}.mp4"
+        result_path = Path(result_root) / f"{mode}_{self.current_epoch}_{idx}_combined.mp4"
         plot_3d_motion(str(result_path), paramUtil.t2m_kinematic_chain, mp_joint, title=caption, fps=30)
-
+    
     def text_length_to_motion_torch(self, text, music, length):
         # text: 1,*
         # length: 1,
@@ -80,48 +100,83 @@ class LitTrainModel(pl.LightningModule):
             # This assumes the lead motion is passed in the batch from sample_text
             if hasattr(self, '_temp_lead_motion'):
                 input_batch["lead_motion"] = self._temp_lead_motion
+                input_batch["follower_motion"] = self._temp_follower_motion 
                 delattr(self, '_temp_lead_motion')  # Clean up after use
+                delattr(self, '_temp_follower_motion')  # Clean up after use
         output_batch = self.model.forward_test(input_batch)
         motions_output = output_batch["output"].reshape(output_batch["output"].shape[0], output_batch["output"].shape[1], 2, -1)
         motions_output = self.normalizerTorch.backward(motions_output.detach())
         return motions_output[:,:,0], motions_output[:,:,1]
     
+    # def sample_text(self, batch_data, batch_idx, mode):
+    #     motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
+    #         batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
+        
+    #     if self.model_cfg.NAME == "DuetModel":
+    #         # Duet dancing: generate both dancer motions simultaneously
+    #         motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
+            
+    #         # Visualize ground truth
+    #         self.plot_motion_intergen(motion1[0], motion2[0], 
+    #                         motion_lens[0], self.vis_dir, text[0],
+    #                         mode=mode, motion='gt', idx=batch_idx)
+            
+    #         # Visualize generated motions
+    #         self.plot_motion_intergen(motion_gen_1[0], motion_gen_2[0], 
+    #                         motion_lens[0], self.vis_dir, text[0],
+    #                         mode=mode, motion='gen', idx=batch_idx)
+        
+    #     elif self.model_cfg.NAME == "ReactModel":
+    #         # Reactive dancing: use ground truth leader (motion1) and generate follower (motion2)
+            
+    #         # Store lead motion temporarily for the text_length_to_motion_torch function
+    #         self._temp_lead_motion = motion1[0:1]
+            
+    #         # Generate only the follower's motion
+    #         _, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
+            
+    #         # Visualize ground truth
+    #         self.plot_motion_intergen(motion1[0], motion2[0], 
+    #                         motion_lens[0], self.vis_dir, text[0],
+    #                         mode=mode, motion='gt', idx=batch_idx)
+            
+    #         # Visualize leader (ground truth) with generated follower
+    #         self.plot_motion_intergen(motion1[0], motion_gen_follower[0], 
+    #                         motion_lens[0], self.vis_dir, text[0],
+    #                         mode=mode, motion='gen', idx=batch_idx)
+
     def sample_text(self, batch_data, batch_idx, mode):
         motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
             batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
         
         if self.model_cfg.NAME == "DuetModel":
-            # Duet dancing: generate both dancer motions simultaneously
+            # Generate both dancer motions
             motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
             
-            # Visualize ground truth
-            self.plot_motion_intergen(motion1[0], motion2[0], 
-                            motion_lens[0], self.vis_dir, text[0],
-                            mode=mode, motion='gt', idx=batch_idx)
-            
-            # Visualize generated motions
-            self.plot_motion_intergen(motion_gen_1[0], motion_gen_2[0], 
-                            motion_lens[0], self.vis_dir, text[0],
-                            mode=mode, motion='gen', idx=batch_idx)
+            # Plot both ground truth and generated in one visualization
+            self.plot_motion_intergen(
+                motion1[0], motion2[0],          # Ground truth motions
+                motion_gen_1[0], motion_gen_2[0], # Generated motions
+                motion_lens[0], self.vis_dir, text[0],
+                mode=mode, idx=batch_idx
+            )
         
         elif self.model_cfg.NAME == "ReactModel":
-            # Reactive dancing: use ground truth leader (motion1) and generate follower (motion2)
-            
-            # Store lead motion temporarily for the text_length_to_motion_torch function
+            # Store lead motion for generation
             self._temp_lead_motion = motion1[0:1]
+            self._temp_follower_motion = motion2[0:1]
             
-            # Generate only the follower's motion
-            _, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
+            # Generate follower motion
+            motion_gen_lead, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
             
-            # Visualize ground truth
-            self.plot_motion_intergen(motion1[0], motion2[0], 
-                            motion_lens[0], self.vis_dir, text[0],
-                            mode=mode, motion='gt', idx=batch_idx)
-            
-            # Visualize leader (ground truth) with generated follower
-            self.plot_motion_intergen(motion1[0], motion_gen_follower[0], 
-                            motion_lens[0], self.vis_dir, text[0],
-                            mode=mode, motion='gen', idx=batch_idx)
+            # Plot both ground truth and generated in one visualization
+            # For ReactModel, lead is the same for both GT and generated
+            self.plot_motion_intergen(
+                motion1[0], motion2[0],          # Ground truth lead and follower
+                motion_gen_lead[0], motion_gen_follower[0], # GT lead and generated follower
+                motion_lens[0], self.vis_dir, text[0],
+                mode=mode, idx=batch_idx
+            )
         
     def forward(self, batch_data):
         motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
@@ -141,6 +196,7 @@ class LitTrainModel(pl.LightningModule):
         if self.model_cfg.NAME == "ReactModel":
             # For reactive dancing, motion1 is considered the leader
             batch["lead_motion"] = motion1
+            batch["follower_motion"] = motion2
 
         loss, loss_logs = self.model(batch)
         return loss, loss_logs
