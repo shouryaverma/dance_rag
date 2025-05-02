@@ -312,10 +312,23 @@ if __name__ == '__main__':
 
     litmodel = LitTrainModel(model, train_cfg, model_cfg)
 
-
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=litmodel.model_dir,
-                                                       every_n_epochs=train_cfg.TRAIN.SAVE_EPOCH,
-                                                       save_top_k = -1)
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        dirpath=litmodel.model_dir,
+        filename="epoch_{epoch:04d}",  # Add proper filename pattern
+        every_n_epochs=train_cfg.TRAIN.SAVE_EPOCH,
+        save_top_k=-1,  # Keep all checkpoints
+        save_last=True  # Save a 'last.ckpt' file
+    )
+    
+    class CustomCheckpointCallback(pl.callbacks.Callback):
+        def on_train_epoch_end(self, trainer, pl_module):
+            # Only save on the specified interval
+            if (trainer.current_epoch + 1) % trainer.check_val_every_n_epoch == 0:
+                # Use your custom save method
+                checkpoint_path = pjoin(pl_module.model_dir, f"model={model_cfg.NAME}-epoch={trainer.current_epoch}-step={pl_module.it}.ckpt")
+                pl_module.save(checkpoint_path)
+                print(f"Custom checkpoint saved at {checkpoint_path}")
+    
     trainer = pl.Trainer(
         default_root_dir=litmodel.model_dir,
         # devices="auto",
@@ -325,7 +338,7 @@ if __name__ == '__main__':
         # strategy=DDPStrategy(find_unused_parameters=True),
         strategy=None,
         precision=32,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, CustomCheckpointCallback()],
         check_val_every_n_epoch = train_cfg.TRAIN.SAVE_EPOCH,
         num_sanity_val_steps=1 # 1
     )

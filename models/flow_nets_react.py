@@ -30,7 +30,7 @@ class FlowNet_React(nn.Module):
         self.time_embed_dim = latent_dim
         
         # Define embedding dimensions
-        self.music_emb_dim = 54
+        self.music_emb_dim = 4800  #54
         self.text_emb_dim = 768
         
         # Time and position embeddings
