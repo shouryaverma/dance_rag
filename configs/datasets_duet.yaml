@@ -27,3 +27,33 @@ test_set:
     MODE: test
     CACHE: True
     music_rep: 'jukebox'
+
+# train_set:
+#     NAME: duet
+#     music_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
+#     motion_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
+#     text_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+#     MOTION_REP: global
+#     MODE: train
+#     CACHE: True
+#     music_rep: 'jukebox'
+
+# val_set:
+#     NAME: duet
+#     music_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
+#     motion_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
+#     text_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+#     MOTION_REP: global
+#     MODE: val
+#     CACHE: True
+#     music_rep: 'jukebox'
+
+# test_set:
+#     NAME: duet
+#     music_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
+#     motion_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
+#     text_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+#     MOTION_REP: global
+#     MODE: test
+#     CACHE: True
+#     music_rep: 'jukebox'

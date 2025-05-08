@@ -16,10 +16,13 @@ class FlowNet_React(nn.Module):
         latent_dim=512,
         num_frames=240,
         ff_size=1024,
+        music_dim=4800,
         num_layers=8,
         num_heads=8,
         dropout=0.1,
-        attention_type="flash",  # Options: "vanilla", "flash"
+        attention_type="flash",  # Options: "vanilla", "flash",
+        use_text=True,
+        use_music=True,
         **kwargs
     ):
         super().__init__()
@@ -28,9 +31,12 @@ class FlowNet_React(nn.Module):
         self.latent_dim = latent_dim
         self.input_feats = input_feats
         self.time_embed_dim = latent_dim
+
+        self.use_text = use_text
+        self.use_music = use_music
         
         # Define embedding dimensions
-        self.music_emb_dim = 4800  #54
+        self.music_emb_dim = music_dim #4800  #54
         self.text_emb_dim = 768
         
         # Time and position embeddings
@@ -109,6 +115,12 @@ class FlowNet_React(nn.Module):
         
         if mask is not None:
             mask = mask[..., 0]
+
+        if not self.use_text:
+            cond = torch.zeros_like(cond)
+        
+        if not self.use_music:
+            music = torch.zeros_like(music)
         
         # Embed timesteps and conditioning
         emb = self.embed_timestep(timesteps) + self.text_embed(cond)
