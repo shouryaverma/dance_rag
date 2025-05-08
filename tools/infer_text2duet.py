@@ -165,6 +165,22 @@ def find_file_pairs(directory):
     return pairs
 
 
+def manual_test(litmodel, test_dataloader):
+    """Manual implementation of the test loop"""
+    litmodel.eval()
+    
+    for batch_idx, batch in enumerate(test_dataloader):
+        # Move batch to device
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                batch[k] = v.to(litmodel.device)
+        
+        # Call the test_step method
+        litmodel.test_step(batch, batch_idx)
+    
+    return {"status": "Completed test"}
+
+
 if __name__ == '__main__':
     model_cfg = get_config("configs/model_duet_debug.yaml")
     train_cfg = get_config("configs/infer_duet_debug.yaml")
@@ -175,39 +191,48 @@ if __name__ == '__main__':
 
     if model_cfg.CHECKPOINT:
         ckpt = torch.load(model_cfg.CHECKPOINT, map_location="cpu")
-        for k in list(ckpt["state_dict"].keys()):
-            if "model" in k:
-                ckpt["state_dict"][k.replace("model.", "")] = ckpt["state_dict"].pop(k)
-        model.load_state_dict(ckpt["state_dict"], strict=False)
+        # FIX: Handle different checkpoint formats
+        if "state_dict" in ckpt:
+            # Handle case where checkpoint has 'state_dict' key
+            for k in list(ckpt["state_dict"].keys()):
+                if "model" in k:
+                    ckpt["state_dict"][k.replace("model.", "")] = ckpt["state_dict"].pop(k)
+            model.load_state_dict(ckpt["state_dict"], strict=False)
+        elif "model" in ckpt:
+            # Handle case where checkpoint has 'model' key
+            model.load_state_dict(ckpt["model"], strict=False)
+        else:
+            # Handle case where checkpoint is already a state_dict
+            model.load_state_dict(ckpt, strict=False)
         print("checkpoint state loaded!")
 
     litmodel = LitGenModel(model, train_cfg).to(torch.device("cuda:0"))
-    # test
-    trainer = pl.Trainer(
-        default_root_dir=litmodel.model_dir,
-        devices="auto", accelerator='gpu',
-        max_epochs=100,
-        strategy=DDPStrategy(find_unused_parameters=True),
-        precision=32,
-        num_sanity_val_steps=0 # 1
-    )
+    
+    # FIX: Instead of using trainer.test(), implement a simple test loop
+    # We've already loaded the model weights manually, so we don't need
+    # to use the PyTorch Lightning checkpoint loading mechanism
+    print("Starting manual test loop...")
+    result = manual_test(litmodel, datamodule.test_dataloader())
+    print(f"Test completed with result: {result}")
+    
+    # # NOTE: This line is replaced with the manual test loop above
+    # # trainer.test(litmodel, dataloaders=datamodule.test_dataloader(), ckpt_path=model_cfg.CHECKPOINT)
+    
+    # # TODO: walk through the folder
+    # folder_path = "/scratch/gilbreth/gupta596/MotionGen/Text2Duet/experiment_split/same_text_diff_music"
+    # # change to your folder
 
-    # trainer.test(litmodel, dataloaders=datamodule.test_dataloader(), ckpt_path=model_cfg.CHECKPOINT)
-    # TODO: walk through the folder
-    folder_path = "/scratch/gilbreth/gupta596/MotionGen/Text2Duet/experiment_split/same_text_diff_music"
-    # change to your folder
-
-    file_pairs = find_file_pairs(folder_path)
-    print(file_pairs)
-    # Now iterate through all potential pairs
-    for base_name, files_dict in file_pairs.items():
-        npy_path = files_dict.get("npy")
-        txt_path = files_dict.get("txt")
-        text = open(txt_path, "r").readlines()[0]
-        music = np.load(npy_path) # should be T, 54
-        assert len(music.shape) == 2, music.shape
-        length = [music.shape[0]]
-        music =  torch.from_numpy(music).unsqueeze(0) # 1, T, 53
-        text = [text]
-        fname = base_name
-        litmodel.sample_given_condition(text, music, length, fname, mode = 'sample')
+    # file_pairs = find_file_pairs(folder_path)
+    # print(file_pairs)
+    # # Now iterate through all potential pairs
+    # for base_name, files_dict in file_pairs.items():
+    #     npy_path = files_dict.get("npy")
+    #     txt_path = files_dict.get("txt")
+    #     text = open(txt_path, "r").readlines()[0]
+    #     music = np.load(npy_path) # should be T, 54
+    #     assert len(music.shape) == 2, music.shape
+    #     length = [music.shape[0]]
+    #     music =  torch.from_numpy(music).unsqueeze(0) # 1, T, 53
+    #     text = [text]
+    #     fname = base_name
+    #     litmodel.sample_given_condition(text, music, length, fname, mode = 'sample')

@@ -24,15 +24,15 @@ test_set:
     motion_root: '/home/verma198/data_split/motion'
     text_root: '/home/verma198/data_split/text'
     MOTION_REP: global
-    MODE: test
+    MODE: val
     CACHE: True
     music_rep: 'jukebox'
 
 # train_set:
 #     NAME: duet
-#     music_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
-#     motion_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
-#     text_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+#     music_root: '/depot/natallah/data/shourya/data_split/music'
+#     motion_root: '/depot/natallah/data/shourya/data_split/motion'
+#     text_root: '/depot/natallah/data/shourya/data_split/text'
 #     MOTION_REP: global
 #     MODE: train
 #     CACHE: True
@@ -40,9 +40,9 @@ test_set:
 
 # val_set:
 #     NAME: duet
-#     music_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
-#     motion_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
-#     text_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+#     music_root: '/depot/natallah/data/shourya/data_split/music'
+#     motion_root: '/depot/natallah/data/shourya/data_split/motion'
+#     text_root: '/depot/natallah/data/shourya/data_split/text'
 #     MOTION_REP: global
 #     MODE: val
 #     CACHE: True
@@ -50,9 +50,9 @@ test_set:
 
 # test_set:
 #     NAME: duet
-#     music_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
-#     motion_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
-#     text_root: '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+#     music_root: '/depot/natallah/data/shourya/data_split/music'
+#     motion_root: '/depot/natallah/data/shourya/data_split/motion'
+#     text_root: '/depot/natallah/data/shourya/data_split/text'
 #     MOTION_REP: global
 #     MODE: test
 #     CACHE: True
