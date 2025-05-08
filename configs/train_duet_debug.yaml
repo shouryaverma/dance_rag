@@ -1,5 +1,5 @@
 GENERAL:
-  EXP_NAME: DEBUG
+  EXP_NAME: duet20_both_juke
   CHECKPOINT: ./checkpoints
   LOG_DIR: ./log
 

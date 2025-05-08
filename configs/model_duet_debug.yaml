@@ -1,5 +1,5 @@
 NAME: DuetModel
-NUM_LAYERS: 10
+NUM_LAYERS: 20
 
 # NAME: ReactModel
 # NUM_LAYERS: 20
@@ -28,4 +28,4 @@ STRATEGY: ddim50
 CFG_WEIGHT: 3.5
 
 USE_TEXT: True
-USE_MOTION: False
+USE_MOTION: True
