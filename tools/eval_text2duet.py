@@ -24,10 +24,11 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 def build_models(cfg):
     if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
+    elif cfg.NAME == "ReactModel":
+        model = ReactModel(cfg)
     else:
         raise NotImplementedError
     return model
-
 
 def evaluate_matching_score(motion_loaders, file):
     match_score_dict = OrderedDict({})
@@ -80,7 +81,6 @@ def evaluate_matching_score(motion_loaders, file):
 
     return match_score_dict, R_precision_dict, activation_dict
 
-
 def evaluate_fid(groundtruth_loader, activation_dict, file):
     eval_dict = OrderedDict({})
     gt_motion_embeddings = []
@@ -102,7 +102,6 @@ def evaluate_fid(groundtruth_loader, activation_dict, file):
         eval_dict[model_name] = fid
     return eval_dict
 
-
 def evaluate_diversity(activation_dict, file):
     eval_dict = OrderedDict({})
     print('========== Evaluating Diversity ==========')
@@ -112,7 +111,6 @@ def evaluate_diversity(activation_dict, file):
         print(f'---> [{model_name}] Diversity: {diversity:.4f}')
         print(f'---> [{model_name}] Diversity: {diversity:.4f}', file=file, flush=True)
     return eval_dict
-
 
 def evaluate_multimodality(mm_motion_loaders, file):
     eval_dict = OrderedDict({})
@@ -137,13 +135,11 @@ def evaluate_multimodality(mm_motion_loaders, file):
         eval_dict[model_name] = multimodality
     return eval_dict
 
-
 def get_metric_statistics(values):
     mean = np.mean(values, axis=0)
     std = np.std(values, axis=0)
     conf_interval = 1.96 * std / np.sqrt(replication_times)
     return mean, conf_interval
-
 
 def evaluation(log_file):
     with open(log_file, 'w') as f:
@@ -213,7 +209,6 @@ def evaluation(log_file):
                 else:
                     all_metrics['MultiModality'][key] += [item]
 
-
         # print(all_metrics['Diversity'])
         for metric_name, metric_dict in all_metrics.items():
             print('========== %s Summary ==========' % metric_name)
@@ -233,7 +228,6 @@ def evaluation(log_file):
                     print(line)
                     print(line, file=f, flush=True)
 
-
 if __name__ == '__main__':
     mm_num_samples = 100
     mm_num_repeats = 30
@@ -241,29 +235,32 @@ if __name__ == '__main__':
 
     diversity_times = 100 # 100
     replication_times = 5 # 20
-
+    
     # batch_size is fixed to 64!!
     batch_size = 64
-    # data_cfg = get_config("configs/datasets.yaml").interhuman_test
-    data_cfg = data_cfg = get_config("configs/datasets_duet_juke.yaml").test_set
-
-    # cfg_path_list = ["configs/model.yaml"]
-    cfg_path_list = ["configs/model_duet_juke.yaml"]
+    data_cfg = data_cfg = get_config("configs/datasets_duet.yaml").test_set
+    cfg_path_list = ["configs/model_duet_debug.yaml"]
     print(cfg_path_list)
 
     eval_motion_loaders = {}
     for cfg_path in cfg_path_list:
-        mdoel_cfg = get_config(cfg_path)
+        model_cfg = get_config(cfg_path)
         device = torch.device('cuda:%d' % 0 if torch.cuda.is_available() else 'cpu')
         torch.cuda.set_device(0)
-        model = build_models(mdoel_cfg)
-        checkpoint = torch.load(mdoel_cfg.CHECKPOINT, map_location=torch.device("cpu"))
-        for k in list(checkpoint["state_dict"].keys()):
-            if "model" in k:
-                checkpoint["state_dict"][k[6:]] = checkpoint["state_dict"].pop(k)
-        model.load_state_dict(checkpoint['state_dict'], strict=True)
+        model = build_models(model_cfg)
+        checkpoint = torch.load(model_cfg.CHECKPOINT, map_location=torch.device("cpu"))
+        # Handle different checkpoint formats
+        if "state_dict" in checkpoint:
+            for k in list(checkpoint["state_dict"].keys()):
+                if "model" in k:
+                    checkpoint["state_dict"][k.replace("model.", "")] = checkpoint["state_dict"].pop(k)
+            model.load_state_dict(checkpoint["state_dict"], strict=True)
+        elif "model" in checkpoint:
+            model.load_state_dict(checkpoint["model"], strict=True)
+        else:
+            model.load_state_dict(checkpoint, strict=True)
 
-        eval_motion_loaders[mdoel_cfg.NAME] = lambda: get_motion_loader(
+        eval_motion_loaders[model_cfg.NAME] = lambda: get_motion_loader(
                                                 batch_size,
                                                 model,
                                                 gt_dataset,
@@ -274,7 +271,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda:%d' % 0 if torch.cuda.is_available() else 'cpu')
     gt_loader, gt_dataset = get_dataset_motion_loader(data_cfg, batch_size)
-    evalmodel_cfg = get_config("configs/eval_model.yaml")
+    evalmodel_cfg = get_config("configs/eval_duet_debug.yaml")
     eval_wrapper = EvaluatorModelWrapper(evalmodel_cfg, device)
 
     log_file = f'./evaluation_{1}.log'

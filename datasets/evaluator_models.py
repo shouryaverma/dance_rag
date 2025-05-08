@@ -3,9 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import clip
-
 from models import *
-
 
 loss_ce = nn.CrossEntropyLoss()
 class InterCLIP(nn.Module):

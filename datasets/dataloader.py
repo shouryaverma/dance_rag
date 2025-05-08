@@ -12,7 +12,6 @@ from torch.utils.data.dataset import Dataset
 import torch
 from torch.utils.data import DistributedSampler as _DistributedSampler
 
-
 class DistributedSampler(_DistributedSampler):
 
     def __init__(self,
@@ -51,7 +50,6 @@ class DistributedSampler(_DistributedSampler):
             assert len(indices) == self.num_samples
 
         return iter(indices)
-
 
 def build_dataloader(dataset: Dataset,
                      samples_per_gpu: int,
@@ -119,9 +117,7 @@ def build_dataloader(dataset: Dataset,
         worker_init_fn=init_fn,
         persistent_workers=persistent_workers,
         **kwargs)
-
     return data_loader
-
 
 def worker_init_fn(worker_id: int, num_workers: int, rank: int, seed: int):
     """Init random seed for each worker."""

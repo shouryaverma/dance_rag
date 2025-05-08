@@ -40,14 +40,10 @@ def extract_text_feature(ori_text):
     if len(ori_text) > 77:
         ori_text = ori_text[:77]
     text = clip.tokenize(ori_text).to(global_device)
-
     with torch.no_grad():
         text_features = clip_model.encode_text(text)
-
     # global text features
-
     return text_features.cpu().numpy()
-
 
 def process():
     music_root = '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'

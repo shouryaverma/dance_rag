@@ -88,6 +88,7 @@ class DataModule(pl.LightningDataModule):
             shuffle=True,
             drop_last=True,
             ) # shuffle = True
+    
     def test_dataloader(self):
         """
         Return test dataloader

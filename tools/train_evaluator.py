@@ -12,6 +12,8 @@ from models import *
 from pathlib import Path
 from utils import paramUtil
 import torch
+from datasets.evaluator_models import InterCLIP
+import argparse
 
 os.environ['PL_TORCH_DISTRIBUTED_BACKEND'] = 'nccl'
 from lightning.pytorch.strategies import DDPStrategy
@@ -46,8 +48,6 @@ class LitTrainModel(pl.LightningModule):
         self.val_it = self.cfg.TRAIN.LAST_ITER if self.cfg.TRAIN.LAST_ITER else 0
         self.val_logs = OrderedDict()
         self.val_local_it = 0
-
-
 
     def _configure_optim(self):
         optimizer = optim.AdamW(self.model.parameters(), lr=float(self.cfg.TRAIN.LR), weight_decay=self.cfg.TRAIN.WEIGHT_DECAY)
@@ -115,8 +115,6 @@ class LitTrainModel(pl.LightningModule):
                             self.trainer.current_epoch,
                             inner_iter=0,
                             lr=self.trainer.optimizers[0].param_groups[0]['lr'])
-        
-
             
     def on_train_batch_end(self, outputs, batch, batch_idx):
         if outputs.get('skip_batch') or not outputs.get('loss_logs'):
@@ -145,14 +143,11 @@ class LitTrainModel(pl.LightningModule):
                                inner_iter=batch_idx,
                                lr=self.trainer.optimizers[0].param_groups[0]['lr'])
 
-
-
     def on_train_epoch_end(self):
         # pass
         sch = self.lr_schedulers()
         if sch is not None:
             sch.step()
-
 
     def save(self, file_name):
         state = {}
@@ -163,7 +158,6 @@ class LitTrainModel(pl.LightningModule):
         torch.save(state, file_name, _use_new_zipfile_serialization=False)
         return
 
-from datasets.evaluator_models import InterCLIP
 def build_models(cfg):
     if cfg.NAME == "InterCLIP":
         model = InterCLIP(cfg)
@@ -171,8 +165,6 @@ def build_models(cfg):
         raise NotImplementedError
     return model
 
-
-import argparse
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Process a string input.")
     parser.add_argument("--model_cfg", type=str, default="configs/eval_model.yaml", help="")
@@ -208,8 +200,6 @@ if __name__ == '__main__':
     print(f"Trainable parameters: {trainable_params}")
 
     litmodel = LitTrainModel(model, train_cfg)
-
-
     checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=litmodel.model_dir,
                                                        every_n_epochs=train_cfg.TRAIN.SAVE_EPOCH*3,
                                                        save_top_k = -1)

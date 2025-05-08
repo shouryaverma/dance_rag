@@ -127,6 +127,8 @@ class LitGenModel(pl.LightningModule):
 def build_models(cfg):
     if cfg.NAME == "DuetModel":
         model = DuetModel(cfg)
+    elif cfg.NAME == "ReactModel":
+        model = ReactModel(cfg)
     else:
         raise NotImplementedError
     return model
@@ -164,7 +166,6 @@ def find_file_pairs(directory):
 
     return pairs
 
-
 def manual_test(litmodel, test_dataloader):
     """Manual implementation of the test loop"""
     litmodel.eval()
@@ -179,7 +180,6 @@ def manual_test(litmodel, test_dataloader):
         litmodel.test_step(batch, batch_idx)
     
     return {"status": "Completed test"}
-
 
 if __name__ == '__main__':
     model_cfg = get_config("configs/model_duet_debug.yaml")
@@ -233,6 +233,6 @@ if __name__ == '__main__':
     #     assert len(music.shape) == 2, music.shape
     #     length = [music.shape[0]]
     #     music =  torch.from_numpy(music).unsqueeze(0) # 1, T, 53
-    #     text = [text]
+    #     text = [text]s
     #     fname = base_name
     #     litmodel.sample_given_condition(text, music, length, fname, mode = 'sample')

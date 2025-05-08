@@ -1,6 +1,5 @@
 from os.path import join as pjoin
 from torch.utils.data import Dataset, DataLoader
-# from datasets import InterHumanDataset
 from datasets.text2duet import Text2Duet
 from models import *
 import copy
@@ -26,14 +25,15 @@ class EvaluationDataset(Dataset):
         with torch.no_grad():
             for i, data in tqdm(enumerate(dataloader)):
                 batch = {}
-                if isinstance(data[0][0], str):
+                if not isinstance(data, dict):
                     name, text, motion1, motion2, motion_lens = data
                     if i in mm_idxs:
                         batch["text"] = list(text) * mm_num_repeats
                     else:
                         batch["text"] = list(text)
                 else:
-                    motion1, motion2, music, text, motion_lens = data
+                    motion1, motion2, music, text, motion_lens = data['motion1'], \
+                        data['motion2'], data['music'], data['text'], data['length']
                     if i in mm_idxs:
                         batch["text"] = list(text) * mm_num_repeats
                     else:
@@ -85,7 +85,6 @@ class EvaluationDataset(Dataset):
         motion1, motion2, motion_lens, text = data['motion1'], data['motion2'], data['motion_lens'], data['text']
         return "generated", text, motion1, motion2, motion_lens
 
-
 class MMGeneratedDataset(Dataset):
     def __init__(self, motion_dataset):
         self.dataset = motion_dataset.mm_generated_motions
@@ -103,27 +102,16 @@ class MMGeneratedDataset(Dataset):
         motion_lens = np.array([motion_lens]*mm_motions1.shape[0])
         return "mm_generated", text, mm_motions1, mm_motions2, motion_lens
 
-
 def get_dataset_motion_loader(opt, batch_size):
     opt = copy.deepcopy(opt)
-    # Configurations of T2M dataset and KIT dataset is almost the same
-    # if opt.NAME == 'interhuman':
-    #     print('Loading dataset %s ...' % opt.NAME)
-
-    #     dataset = InterHumanDataset(opt)
-    #     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=0, drop_last=True, shuffle=True)
-        # TODO: add duet option
     if opt.NAME == 'duet':
-        dataset = Text2Duet(opt.music_root, opt.motion_root, opt.text_root, opt.MODE)
+        dataset = Text2Duet(opt, opt.music_root, opt.motion_root, opt.text_root, opt.MODE)
         dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=0, drop_last=True, shuffle=True)
     else:
         raise KeyError('Dataset not Recognized !!')
 
     print('Ground Truth Dataset Loading Completed!!!')
     return dataloader, dataset
-
-
-
 
 def get_motion_loader(batch_size, model, ground_truth_dataset, device, mm_num_samples, mm_num_repeats):
     # Currently the configurations of two datasets are almost the same
@@ -134,28 +122,26 @@ def get_motion_loader(batch_size, model, ground_truth_dataset, device, mm_num_sa
     mm_motion_loader = DataLoader(mm_dataset, batch_size=1, num_workers=0)
 
     print('Generated Dataset Loading Completed!!!')
-
     return motion_loader, mm_motion_loader
-
-
-
 
 def build_models(cfg):
     model = InterCLIP(cfg)
-
-    checkpoint = torch.load(pjoin('eval_model/interclip.ckpt'),map_location="cpu")
-    # checkpoint = torch.load(pjoin('checkpoints/interclip/model/5.ckpt'),map_location="cpu")
-    for k in list(checkpoint["state_dict"].keys()):
-        if "model" in k:
-            checkpoint["state_dict"][k.replace("model.", "")] = checkpoint["state_dict"].pop(k)
-    model.load_state_dict(checkpoint["state_dict"], strict=True)
-
-    # print('Loading Evaluation Model Wrapper (Epoch %d) Completed!!' % (checkpoint['epoch']))
+    checkpoint = torch.load("/home/verma198/epoch=599-step=16800.ckpt",map_location="cpu")
+    
+    # Handle different checkpoint formats
+    if "state_dict" in checkpoint:
+        for k in list(checkpoint["state_dict"].keys()):
+            if "model" in k:
+                checkpoint["state_dict"][k.replace("model.", "")] = checkpoint["state_dict"].pop(k)
+        model.load_state_dict(checkpoint["state_dict"], strict=True)
+    elif "model" in checkpoint:
+        model.load_state_dict(checkpoint["model"], strict=True)
+    else:
+        model.load_state_dict(checkpoint, strict=True)
+        
     return model
 
-
 class EvaluatorModelWrapper(object):
-
     def __init__(self, cfg, device):
 
         self.model = build_models(cfg)
@@ -165,14 +151,14 @@ class EvaluatorModelWrapper(object):
         self.model = self.model.to(device)
         self.model.eval()
 
-
     # Please note that the results does not following the order of inputs
     def get_co_embeddings(self, batch_data):
         with torch.no_grad():
-            if isinstance(batch_data[0][0], str):
+            if not isinstance(batch_data, dict):
                 name, text, motion1, motion2, motion_lens = batch_data
             else:
-                motion1, motion2, music, text, motion_lens = batch_data
+                motion1, motion2, _, text, motion_lens = batch_data['motion1'], \
+                    batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
         
             motion1 = motion1.detach().float()  # .to(self.device)
             motion2 = motion2.detach().float()  # .to(self.device)
@@ -204,10 +190,12 @@ class EvaluatorModelWrapper(object):
     # Please note that the results does not following the order of inputs
     def get_motion_embeddings(self, batch_data):
         with torch.no_grad():
-            if isinstance(batch_data[0][0], str):
+            if not isinstance(batch_data, dict):
                 name, text, motion1, motion2, motion_lens = batch_data
             else:
-                motion1, motion2, music, text, motion_lens = batch_data
+                motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
+                    batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
+        
             motion1 = motion1.detach().float()  # .to(self.device)
             motion2 = motion2.detach().float()  # .to(self.device)
             motions = torch.cat([motion1, motion2], dim=-1)

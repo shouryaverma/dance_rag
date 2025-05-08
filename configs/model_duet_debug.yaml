@@ -11,7 +11,7 @@ LATENT_DIM: 512
 FF_SIZE: 1024
 MUSIC_DIM: 4800
 ACTIVATION: gelu
-CHECKPOINT: /home/verma198/Public/dance/checkpoints/duet20_both_juke/model/model=DuetModel-epoch=99-step=600.ckpt
+CHECKPOINT: /home/verma198/epoch_epoch=1499.ckpt
 
 DIFFUSION_STEPS: 200
 BETA_SCHEDULER: cosine
