@@ -299,9 +299,9 @@ def plot_t2m(mp_data, result_path, caption):
 # unit test
 if __name__ == '__main__':
 
-    music_root = '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/music'
-    motion_root = '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/motion'
-    text_root = '/scratch/gilbreth/gupta596/MotionGen/Text2Duet/data_split/text'
+    music_root = '/home/verma198/data_split/music'
+    motion_root = '/home/verma198/data_split/music'
+    text_root = '/home/verma198/data_split/music'
 
     t2d = Text2Duet(music_root, motion_root, text_root, split='train', dtype='pos3d', music_dance_rate=1)
     print(len(t2d))

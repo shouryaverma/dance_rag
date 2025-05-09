@@ -49,10 +49,6 @@ class EvaluationDataset(Dataset):
                 motions_output = batch["output"].reshape(batch["output"].shape[0], batch["output"].shape[1], 2, -1)
                 motions_output = self.normalizer.backward(motions_output.cpu().detach().numpy())
 
-                # motions_output[..., :22 * 3] = filters.gaussian_filter1d(motions_output[..., :22 * 3], 1, axis=0, mode='nearest')
-                # motions_output[..., 22 * 3:22 * 6] = filters.gaussian_filter1d(motions_output[..., 22 * 3:22 * 6], 0.1, axis=0, mode='nearest')
-                # motions_output[..., 22 * 6:22 * 6 + 21 * 6] = filters.gaussian_filter1d(motions_output[..., 22 * 6:22 * 6 + 21 * 6], 0.5, axis=0, mode='nearest')
-
                 B,T = motions_output.shape[0], motions_output.shape[1]
                 if T < self.max_length:
                     padding_len = self.max_length - T
@@ -122,26 +118,31 @@ def get_motion_loader(batch_size, model, ground_truth_dataset, device, mm_num_sa
     mm_motion_loader = DataLoader(mm_dataset, batch_size=1, num_workers=0)
 
     print('Generated Dataset Loading Completed!!!')
+
     return motion_loader, mm_motion_loader
 
 def build_models(cfg):
     model = InterCLIP(cfg)
-    checkpoint = torch.load("/home/verma198/epoch=599-step=16800.ckpt",map_location="cpu")
+    checkpoint = torch.load("/home/verma198/epoch=599-step=16800.ckpt", map_location="cpu")
     
     # Handle different checkpoint formats
     if "state_dict" in checkpoint:
+        # Handle case where checkpoint has 'state_dict' key
         for k in list(checkpoint["state_dict"].keys()):
             if "model" in k:
                 checkpoint["state_dict"][k.replace("model.", "")] = checkpoint["state_dict"].pop(k)
         model.load_state_dict(checkpoint["state_dict"], strict=True)
     elif "model" in checkpoint:
+        # Handle case where checkpoint has 'model' key
         model.load_state_dict(checkpoint["model"], strict=True)
     else:
+        # Handle case where checkpoint is already a state_dict
         model.load_state_dict(checkpoint, strict=True)
-        
+    
     return model
 
 class EvaluatorModelWrapper(object):
+
     def __init__(self, cfg, device):
 
         self.model = build_models(cfg)
@@ -150,6 +151,7 @@ class EvaluatorModelWrapper(object):
 
         self.model = self.model.to(device)
         self.model.eval()
+
 
     # Please note that the results does not following the order of inputs
     def get_co_embeddings(self, batch_data):
