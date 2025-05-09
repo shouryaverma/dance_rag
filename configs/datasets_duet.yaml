@@ -24,7 +24,7 @@ test_set:
     motion_root: '/home/verma198/data_split/motion'
     text_root: '/home/verma198/data_split/text'
     MOTION_REP: global
-    MODE: val
+    MODE: test
     CACHE: True
     music_rep: 'jukebox'
 

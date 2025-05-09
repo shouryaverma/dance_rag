@@ -198,6 +198,9 @@ class FlowMatching_Duet(nn.Module):
         self.dropout = cfg.DROPOUT
         self.activation = cfg.ACTIVATION
         self.motion_rep = cfg.MOTION_REP
+        self.use_text = cfg.USE_TEXT
+        self.use_music = cfg.USE_MUSIC
+        self.music_dim = cfg.MUSIC_DIM
         
         # Create the velocity field prediction network
         self.net = FlowNet_Duet(
@@ -207,7 +210,10 @@ class FlowMatching_Duet(nn.Module):
             num_layers=self.num_layers,
             num_heads=self.num_heads,
             dropout=self.dropout,
-            activation=self.activation
+            activation=self.activation,
+            music_dim=self.music_dim,
+            use_text=self.use_text,
+            use_music=self.use_music,
         )
         
         # Create the rectified flow model
