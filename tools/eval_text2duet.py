@@ -241,10 +241,10 @@ if __name__ == '__main__':
     mm_num_repeats = 30
     mm_num_times = 10
 
-    diversity_times = 100 # 100
+    diversity_times = 3 # 100
     replication_times = 5 # 20
 
-    batch_size = 128
+    batch_size = 4
     data_cfg = data_cfg = get_config("/home/verma198/Public/dance/configs/datasets_duet.yaml").test_set
 
     cfg_path_list = ["/home/verma198/Public/dance/configs/model_duet_debug.yaml"]
@@ -257,32 +257,32 @@ if __name__ == '__main__':
         torch.cuda.set_device(0)
         model = build_models(model_cfg)
         
-        # Load checkpoint with more robust handling
+        # Load checkpoint with robust handling
         checkpoint = torch.load(model_cfg.CHECKPOINT, map_location=torch.device("cpu"))
         
-        # Handle different checkpoint formats
         if "state_dict" in checkpoint:
-            # Handle case where checkpoint has 'state_dict' key
             for k in list(checkpoint["state_dict"].keys()):
                 if "model" in k:
                     checkpoint["state_dict"][k[6:]] = checkpoint["state_dict"].pop(k)
             model.load_state_dict(checkpoint["state_dict"], strict=True)
         elif "model" in checkpoint:
-            # Handle case where checkpoint has 'model' key
             model.load_state_dict(checkpoint["model"], strict=True)
         else:
-            # Handle case where checkpoint is already a state_dict
             model.load_state_dict(checkpoint, strict=True)
         
-        # Rest of your code continues here
-        eval_motion_loaders[model_cfg.NAME] = lambda: get_motion_loader(
-                                                batch_size,
-                                                model,
-                                                gt_dataset,
-                                                device,
-                                                mm_num_samples,
-                                                mm_num_repeats
-                                                )
+        # Create a proper closure to capture the current model instance
+        def create_loader_getter(current_model):
+            return lambda: get_motion_loader(
+                    batch_size,
+                    current_model,  # Use the captured model
+                    gt_dataset,
+                    device,
+                    mm_num_samples,
+                    mm_num_repeats
+                )
+        
+        # Store the function that will create the loader with the current model
+        eval_motion_loaders[model_cfg.NAME] = create_loader_getter(model)
 
     device = torch.device('cuda:%d' % 0 if torch.cuda.is_available() else 'cpu')
     gt_loader, gt_dataset = get_dataset_motion_loader(data_cfg, batch_size)
