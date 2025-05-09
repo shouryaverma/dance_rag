@@ -1,5 +1,5 @@
 NAME: DuetModel
-NUM_LAYERS: 10
+NUM_LAYERS: 20
 
 # NAME: ReactModel
 # NUM_LAYERS: 20
@@ -11,9 +11,9 @@ LATENT_DIM: 512
 FF_SIZE: 1024
 MUSIC_DIM: 4800
 ACTIVATION: gelu
-CHECKPOINT: /home/verma198/Public/dance/checkpoints/duet10_both_juke/model/model=DuetModel-epoch=599-step=3600.ckpt
+CHECKPOINT: #/home/verma198/Public/dance/checkpoints/duet10_both_juke/model/model=DuetModel-epoch=599-step=3600.ckpt
 
-DIFFUSION_STEPS: 2
+DIFFUSION_STEPS: 200
 BETA_SCHEDULER: cosine
 SAMPLER: uniform
 

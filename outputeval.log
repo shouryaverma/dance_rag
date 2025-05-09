@@ -1,209 +1,0 @@
-nohup: ignoring input
-/home/verma198/miniconda3/envs/dance/lib/python3.8/site-packages/torchvision/io/image.py:13: UserWarning: Failed to load image Python extension: libtorch_cuda_cu.so: cannot open shared object file: No such file or directory
-  warn(f"Failed to load image Python extension: {e}")
-/home/verma198/miniconda3/envs/dance/lib/python3.8/site-packages/torch/nn/modules/transformer.py:307: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
-  warnings.warn(f"enable_nested_tensor is True, but self.use_nested_tensor is False because {why_not_sparsity_fast_path}")
-tools/eval_text2duet.py:261: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  checkpoint = torch.load(model_cfg.CHECKPOINT, map_location=torch.device("cpu"))
-['/home/verma198/Public/dance/configs/model_duet_debug.yaml']
-dataset first-round loading done
-  0%|          | 0/23 [00:00<?, ?it/s]/home/verma198/Public/dance/tools/../utils/quaternion.py:394: UserWarning: Using torch.cross without specifying the dim arg is deprecated.
-Please either pass the dim explicitly or simply use torch.linalg.cross.
-The default value of dim will change to agree with that of linalg.cross in a future release. (Triggered internally at ../aten/src/ATen/native/Cross.cpp:62.)
-  v = torch.cross(v0, v1)
-100%|██████████| 23/23 [00:00<00:00, 979.55it/s]
-/home/verma198/Public/dance/tools/../datasets/evaluator.py:126: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  checkpoint = torch.load("/home/verma198/epoch=599-step=16800.ckpt", map_location="cpu")
-Ground Truth Dataset Loading Completed!!!
-0it [00:00, ?it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.72it/s][A100%|██████████| 2/2 [00:00<00:00,  2.94it/s]
-1it [00:00,  1.26it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.97it/s][A100%|██████████| 2/2 [00:00<00:00,  3.36it/s]
-2it [00:01,  1.40it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  5.22it/s][A100%|██████████| 2/2 [00:00<00:00,  8.97it/s]
-3it [00:01,  1.97it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.52it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.95it/s][A100%|██████████| 2/2 [00:00<00:00,  2.59it/s]
-4it [00:02,  1.56it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.18it/s][A100%|██████████| 2/2 [00:00<00:00,  3.70it/s]
-5it [00:03,  1.60it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  3.88it/s][A100%|██████████| 2/2 [00:00<00:00,  6.59it/s]
-6it [00:03,  1.89it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.33it/s][A100%|██████████| 2/2 [00:00<00:00,  7.43it/s]
-7it [00:03,  2.19it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.54it/s][A
-100%|██████████| 2/2 [00:00<00:00,  3.01it/s][A100%|██████████| 2/2 [00:00<00:00,  2.63it/s]
-8it [00:04,  1.74it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.79it/s][A100%|██████████| 2/2 [00:00<00:00,  8.23it/s]
-9it [00:04,  2.07it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  3.69it/s][A100%|██████████| 2/2 [00:00<00:00,  6.31it/s]
-10it [00:05,  2.24it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.49it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.90it/s][A100%|██████████| 2/2 [00:00<00:00,  2.54it/s]
-11it [00:06,  1.74it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.49it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.90it/s][A100%|██████████| 2/2 [00:00<00:00,  2.54it/s]
-12it [00:07,  1.51it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.89it/s][A100%|██████████| 2/2 [00:00<00:00,  4.90it/s]
-13it [00:07,  1.67it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  7.01it/s][A100%|██████████| 2/2 [00:00<00:00, 12.10it/s]
-14it [00:07,  2.09it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.54it/s][A
-100%|██████████| 2/2 [00:00<00:00,  3.00it/s][A100%|██████████| 2/2 [00:00<00:00,  2.62it/s]
-15it [00:08,  1.71it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.50it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.92it/s][A100%|██████████| 2/2 [00:00<00:00,  2.56it/s]
-16it [00:09,  1.50it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.40it/s][A100%|██████████| 2/2 [00:00<00:00,  4.10it/s]
-17it [00:09,  1.59it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.60it/s][A100%|██████████| 2/2 [00:00<00:00,  7.90it/s]
-18it [00:10,  1.89it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  3.66it/s][A100%|██████████| 2/2 [00:00<00:00,  6.26it/s]
-19it [00:10,  2.09it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.59it/s][A
-100%|██████████| 2/2 [00:00<00:00,  3.10it/s][A100%|██████████| 2/2 [00:00<00:00,  2.72it/s]
-20it [00:11,  1.73it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.75it/s][A100%|██████████| 2/2 [00:00<00:00,  2.97it/s]
-21it [00:12,  1.59it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  5.84it/s][A100%|██████████| 2/2 [00:00<00:00, 10.05it/s]
-22it [00:12,  1.96it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.53it/s][A100%|██████████| 2/2 [00:00<00:00,  7.78it/s]
-23it [00:12,  2.24it/s]23it [00:12,  1.82it/s]
-Generated Dataset Loading Completed!!!
-==================== Replication 0 ====================
-Time: 2025-05-08 22:10:21.472936
-========== Evaluating MM Distance ==========
-0it [00:00, ?it/s]/home/verma198/miniconda3/envs/dance/lib/python3.8/site-packages/torch/nn/modules/transformer.py:409: UserWarning: The PyTorch API of nested tensors is in prototype stage and will change in the near future. (Triggered internally at ../aten/src/ATen/NestedTensorImpl.cpp:178.)
-  output = torch._nested_tensor_from_mask(output, src_key_padding_mask.logical_not(), mask_check=False)
-5it [00:00, 64.52it/s]
----> [ground truth] MM Distance: 0.0341
----> [ground truth] R_precision: (top 1): 0.5000 (top 2): 0.8500 (top 3): 0.9000 
-0it [00:00, ?it/s]5it [00:00, 122.51it/s]
----> [DuetModel] MM Distance: 0.6624
----> [DuetModel] R_precision: (top 1): 0.3000 (top 2): 0.5500 (top 3): 0.8000 
-Time: 2025-05-08 22:10:21.591649
-========== Evaluating FID ==========
-0it [00:00, ?it/s]5it [00:00, 102.39it/s]
----> [ground truth] FID: 0.0010
----> [DuetModel] FID: 76.2011
-Time: 2025-05-08 22:10:22.131814
-========== Evaluating Diversity ==========
----> [ground truth] Diversity: 3.2104
----> [DuetModel] Diversity: 0.0101
-Time: 2025-05-08 22:10:22.132119
-========== Evaluating MultiModality ==========
----> [DuetModel] Multimodality: 0.0023
-!!! DONE !!!
-0it [00:00, ?it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.79it/s][A100%|██████████| 2/2 [00:00<00:00,  3.04it/s]
-1it [00:00,  1.38it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.52it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.94it/s][A100%|██████████| 2/2 [00:00<00:00,  2.58it/s]
-2it [00:01,  1.26it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  3.89it/s][A100%|██████████| 2/2 [00:00<00:00,  6.60it/s]
-3it [00:01,  1.70it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  5.20it/s][A100%|██████████| 2/2 [00:00<00:00,  8.82it/s]
-4it [00:02,  2.18it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.62it/s][A100%|██████████| 2/2 [00:00<00:00,  7.84it/s]
-5it [00:02,  2.51it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.83it/s][A100%|██████████| 2/2 [00:00<00:00,  3.11it/s]
-6it [00:03,  1.98it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.90it/s][A100%|██████████| 2/2 [00:00<00:00,  8.31it/s]
-7it [00:03,  2.32it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.89it/s][A100%|██████████| 2/2 [00:00<00:00,  4.90it/s]
-8it [00:03,  2.28it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  3.89it/s][A100%|██████████| 2/2 [00:00<00:00,  6.60it/s]
-9it [00:04,  2.45it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.03it/s][A100%|██████████| 2/2 [00:00<00:00,  3.44it/s]
-10it [00:04,  2.08it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  4.98it/s][A100%|██████████| 2/2 [00:00<00:00,  8.45it/s]
-11it [00:05,  2.40it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.50it/s][A100%|██████████| 2/2 [00:00<00:00,  4.24it/s]
-12it [00:05,  2.23it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.52it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.94it/s][A100%|██████████| 2/2 [00:00<00:00,  2.58it/s]
-13it [00:06,  1.76it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.58it/s][A
-100%|██████████| 2/2 [00:00<00:00,  3.05it/s][A100%|██████████| 2/2 [00:00<00:00,  2.68it/s]
-14it [00:07,  1.55it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.57it/s][A
-100%|██████████| 2/2 [00:00<00:00,  3.04it/s][A100%|██████████| 2/2 [00:00<00:00,  2.67it/s]
-15it [00:08,  1.44it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.63it/s][A
-100%|██████████| 2/2 [00:00<00:00,  3.16it/s][A100%|██████████| 2/2 [00:00<00:00,  2.77it/s]
-16it [00:08,  1.38it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.52it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.94it/s][A100%|██████████| 2/2 [00:00<00:00,  2.58it/s]
-17it [00:09,  1.31it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  2.17it/s][A100%|██████████| 2/2 [00:00<00:00,  3.69it/s]
-18it [00:10,  1.40it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  6.43it/s][A100%|██████████| 2/2 [00:00<00:00, 10.90it/s]
-19it [00:10,  1.77it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  1.53it/s][A
-100%|██████████| 2/2 [00:00<00:00,  2.96it/s][A100%|██████████| 2/2 [00:00<00:00,  2.59it/s]
-20it [00:11,  1.54it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  7.89it/s][A100%|██████████| 2/2 [00:00<00:00, 13.40it/s]
-21it [00:11,  1.96it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  3.90it/s][A100%|██████████| 2/2 [00:00<00:00,  6.60it/s]
-22it [00:12,  2.16it/s]
-  0%|          | 0/2 [00:00<?, ?it/s][A
- 50%|█████     | 1/2 [00:00<00:00,  5.65it/s][A100%|██████████| 2/2 [00:00<00:00,  9.58it/s]
-23it [00:12,  2.50it/s]23it [00:12,  1.87it/s]
-Generated Dataset Loading Completed!!!
-==================== Replication 1 ====================
-Time: 2025-05-08 22:10:35.071303
-========== Evaluating MM Distance ==========
-0it [00:00, ?it/s]5it [00:00, 83.77it/s]
----> [ground truth] MM Distance: 0.0362
----> [ground truth] R_precision: (top 1): 0.5000 (top 2): 0.7500 (top 3): 0.9500 
-0it [00:00, ?it/s]5it [00:00, 123.17it/s]
----> [DuetModel] MM Distance: 0.6603
----> [DuetModel] R_precision: (top 1): 0.3000 (top 2): 0.5500 (top 3): 0.7500 
-Time: 2025-05-08 22:10:35.172025
-========== Evaluating FID ==========
-0it [00:00, ?it/s]5it [00:00, 102.85it/s]
