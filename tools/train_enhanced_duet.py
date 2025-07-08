@@ -17,10 +17,9 @@ import os
 import time
 import numpy as np
 
-from utils.utils import MotionNormalizerTorch  # Motion normalization utility
-from utils.utils import CosineWarmupScheduler  # Learning rate scheduler
-from utils.utils import print_current_loss     # Logging utility
-from utils.plot_script import plot_3d_motion  # Visualization utility
+from models.utils import CosineWarmupScheduler, print_current_loss
+from utils.utils import MotionNormalizerTorch
+from utils.plot_script import plot_3d_motion
 
 os.environ['PL_TORCH_DISTRIBUTED_BACKEND'] = 'nccl'
 from lightning.pytorch.strategies import DDPStrategy
