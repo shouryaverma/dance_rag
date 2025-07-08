@@ -244,105 +244,131 @@ class RetrievalFlowNet_Duet(nn.Module):
         
         return output
 
-
 class RetrievalDuetBlock(nn.Module):
     """
-    Enhanced duet block with retrieval conditioning.
+    Enhanced duet block with retrieval conditioning - FIXED to match your architecture.
     """
     def __init__(self, latent_dim, num_heads, dropout, ff_size, use_retrieval=True):
         super().__init__()
         self.latent_dim = latent_dim
         self.use_retrieval = use_retrieval
         
-        # Self-attention for each dancer
-        self.self_attn_a = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
-        self.self_attn_b = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
+        # Temporal modeling with 3 temporal convolutions at different scales (matching your pattern)
+        self.temporal_conv1 = nn.Conv1d(latent_dim, latent_dim, kernel_size=5, padding=2, groups=4)
+        self.temporal_conv2 = nn.Conv1d(latent_dim, latent_dim, kernel_size=11, padding=5, groups=4)
+        self.temporal_conv3 = nn.Conv1d(latent_dim, latent_dim, kernel_size=21, padding=10, groups=4)
         
-        # Cross-attention between dancers
-        self.cross_attn_a2b = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
-        self.cross_attn_b2a = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
+        # Gates to control the influence of each temporal scale (matching your pattern)
+        self.temporal_gate1 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate2 = nn.Parameter(torch.ones(1) * 0.2)
+        self.temporal_gate3 = nn.Parameter(torch.ones(1) * 0.2)
+
+        # Gelu activation function (matching your pattern)
+        self.gelu = nn.GELU()
         
-        # Music conditioning attention
-        self.music_attn_a = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
-        self.music_attn_b = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
+        # Self-attention for each dancer (matching your pattern)
+        self.dancer_a_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
+        self.dancer_b_self_attn = VanillaSelfAttention(latent_dim, num_heads, dropout)
+        self.dancer_a_norm1 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm1 = nn.LayerNorm(latent_dim)
         
-        # Retrieval conditioning attention
+        # Cross-attention between dancers (matching your pattern)
+        self.a_to_b_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.b_to_a_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm2 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm2 = nn.LayerNorm(latent_dim)
+        
+        # Music conditioning attention (matching your pattern)
+        self.music_to_a_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.music_to_b_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm3 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm3 = nn.LayerNorm(latent_dim)
+        
+        # Retrieval conditioning attention (NEW - but matching your pattern)
         if use_retrieval:
-            self.retrieval_attn_a = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
-            self.retrieval_attn_b = nn.MultiheadAttention(latent_dim, num_heads, dropout=dropout, batch_first=True)
+            self.retrieval_to_a_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+            self.retrieval_to_b_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+            self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
+            self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
         
-        # Layer norms
-        self.norm_a1 = nn.LayerNorm(latent_dim)
-        self.norm_a2 = nn.LayerNorm(latent_dim)
-        self.norm_a3 = nn.LayerNorm(latent_dim)
-        if use_retrieval:
-            self.norm_a4 = nn.LayerNorm(latent_dim)
-        
-        self.norm_b1 = nn.LayerNorm(latent_dim)
-        self.norm_b2 = nn.LayerNorm(latent_dim)
-        self.norm_b3 = nn.LayerNorm(latent_dim)
-        if use_retrieval:
-            self.norm_b4 = nn.LayerNorm(latent_dim)
-        
-        # Feed-forward networks
-        self.ffn_a = AdaLayerNorm(latent_dim, ff_size, dropout, latent_dim)
-        self.ffn_b = AdaLayerNorm(latent_dim, ff_size, dropout, latent_dim)
-        
-        # Music processing
-        self.music_ffn = nn.Sequential(
-            nn.Linear(latent_dim, ff_size),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(ff_size, latent_dim),
-            nn.Dropout(dropout)
-        )
-        self.music_norm = nn.LayerNorm(latent_dim)
+        # Feed-forward networks (FIXED - using your FFN class)
+        norm_idx = 5 if use_retrieval else 4
+        self.dancer_a_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        setattr(self, f'dancer_a_norm{norm_idx}', nn.LayerNorm(latent_dim))
+        setattr(self, f'dancer_b_norm{norm_idx}', nn.LayerNorm(latent_dim))
     
     def forward(self, h_a, h_b, music_emb, emb, key_padding_mask, retrieval_features=None):
         """
-        Forward pass with multi-modal attention.
+        Forward pass with multi-modal attention - FIXED to match your EXACT pattern.
         """
-        # Self-attention for each dancer
-        h_a_self, _ = self.self_attn_a(h_a, h_a, h_a, key_padding_mask=key_padding_mask)
-        h_a = self.norm_a1(h_a + h_a_self)
-        
-        h_b_self, _ = self.self_attn_b(h_b, h_b, h_b, key_padding_mask=key_padding_mask)
-        h_b = self.norm_b1(h_b + h_b_self)
-        
-        # Cross-attention between dancers
-        h_a_cross, _ = self.cross_attn_a2b(h_a, h_b, h_b, key_padding_mask=key_padding_mask)
-        h_a = self.norm_a2(h_a + h_a_cross)
-        
-        h_b_cross, _ = self.cross_attn_b2a(h_b, h_a, h_a, key_padding_mask=key_padding_mask)
-        h_b = self.norm_b2(h_b + h_b_cross)
-        
-        # Music conditioning
-        h_a_music, _ = self.music_attn_a(h_a, music_emb, music_emb, key_padding_mask=key_padding_mask)
-        h_a = self.norm_a3(h_a + h_a_music)
-        
-        h_b_music, _ = self.music_attn_b(h_b, music_emb, music_emb, key_padding_mask=key_padding_mask)
-        h_b = self.norm_b3(h_b + h_b_music)
-        
-        # Retrieval conditioning
-        if self.use_retrieval and retrieval_features is not None:
-            h_a_retrieval, _ = self.retrieval_attn_a(h_a, retrieval_features, retrieval_features, 
-                                                   key_padding_mask=key_padding_mask)
-            h_a = self.norm_a4(h_a + h_a_retrieval)
-            
-            h_b_retrieval, _ = self.retrieval_attn_b(h_b, retrieval_features, retrieval_features,
-                                                   key_padding_mask=key_padding_mask)
-            h_b = self.norm_b4(h_b + h_b_retrieval)
-        
-        # Feed-forward
-        h_a = self.ffn_a(h_a, emb)
-        h_b = self.ffn_b(h_b, emb)
-        
-        # Update music embedding
-        music_updated = self.music_ffn(music_emb)
-        music_emb = self.music_norm(music_emb + music_updated)
-        
-        return h_a, h_b, music_emb
+        # Apply multi-scale temporal convolutions (exactly matching your pattern)
+        h_a_t = h_a.transpose(1, 2)  # B, T, D → B, D, T
+        h_a_temporal_feats1 = self.temporal_conv1(h_a_t).transpose(1, 2)  # Back to B, T, D
+        h_a_temporal_feats2 = self.temporal_conv2(h_a_t).transpose(1, 2)  # Back to B, T, D
+        h_a_temporal_feats3 = self.temporal_conv3(h_a_t).transpose(1, 2)  # Back to B, T, D
 
+        # gelu activation (exactly matching your pattern)
+        h_a_temporal_feats1 = self.gelu(h_a_temporal_feats1)
+        h_a_temporal_feats2 = self.gelu(h_a_temporal_feats2)
+        h_a_temporal_feats3 = self.gelu(h_a_temporal_feats3)
+
+        h_a = h_a + self.temporal_gate1 * h_a_temporal_feats1 + \
+              self.temporal_gate2 * h_a_temporal_feats2 + \
+              self.temporal_gate3 * h_a_temporal_feats3   
+        
+        h_b_t = h_b.transpose(1, 2)  # B, T, D → B, D, T
+        h_b_temporal_feats1 = self.temporal_conv1(h_b_t).transpose(1, 2)  # Back to B, T, D
+        h_b_temporal_feats2 = self.temporal_conv2(h_b_t).transpose(1, 2)  # Back to B, T, D
+        h_b_temporal_feats3 = self.temporal_conv3(h_b_t).transpose(1, 2)  # Back to B, T, D
+
+        # gelu activation (exactly matching your pattern)
+        h_b_temporal_feats1 = self.gelu(h_b_temporal_feats1)
+        h_b_temporal_feats2 = self.gelu(h_b_temporal_feats2)
+        h_b_temporal_feats3 = self.gelu(h_b_temporal_feats3)
+
+        h_b = h_b + self.temporal_gate1 * h_b_temporal_feats1 + \
+              self.temporal_gate2 * h_b_temporal_feats2 + \
+              self.temporal_gate3 * h_b_temporal_feats3
+        
+        # Process dancers with self-attention (exactly matching your pattern)
+        h_a_norm1 = self.dancer_a_norm1(h_a)
+        h_b_norm1 = self.dancer_b_norm1(h_b)
+        h_a_self = h_a + self.dancer_a_self_attn(h_a_norm1, emb, key_padding_mask)
+        h_b_self = h_b + self.dancer_b_self_attn(h_b_norm1, emb, key_padding_mask)
+        
+        # Apply music conditioning to dancers (exactly matching your pattern)
+        h_a_norm2 = self.dancer_a_norm2(h_a_self)
+        h_b_norm2 = self.dancer_b_norm2(h_b_self)
+        h_a_music = h_a_self + self.music_to_a_attn(h_a_norm2, music_emb, emb, key_padding_mask)
+        h_b_music = h_b_self + self.music_to_b_attn(h_b_norm2, music_emb, emb, key_padding_mask)
+        
+        # Dancers interact with each other (exactly matching your pattern)
+        h_a_norm3 = self.dancer_a_norm3(h_a_music)
+        h_b_norm3 = self.dancer_b_norm3(h_b_music)
+        h_a_interact = h_a_music + self.b_to_a_attn(h_a_norm3, h_b_music, emb, key_padding_mask)
+        h_b_interact = h_b_music + self.a_to_b_attn(h_b_norm3, h_a_music, emb, key_padding_mask)
+        
+        # Retrieval conditioning (NEW - but exactly matching your pattern)
+        if self.use_retrieval and retrieval_features is not None:
+            h_a_norm4 = self.dancer_a_norm4(h_a_interact)
+            h_b_norm4 = self.dancer_b_norm4(h_b_interact)
+            h_a_retrieval = h_a_interact + self.retrieval_to_a_attn(h_a_norm4, retrieval_features, emb, key_padding_mask)
+            h_b_retrieval = h_b_interact + self.retrieval_to_b_attn(h_b_norm4, retrieval_features, emb, key_padding_mask)
+            
+            # Apply feedforward networks to dancers (FIXED - exactly matching your FFN pattern)
+            h_a_norm5 = self.dancer_a_norm5(h_a_retrieval)
+            h_b_norm5 = self.dancer_b_norm5(h_b_retrieval)
+            h_a_final = h_a_retrieval + self.dancer_a_ffn(h_a_norm5, emb)  # YOUR PATTERN: ffn(norm, emb)
+            h_b_final = h_b_retrieval + self.dancer_b_ffn(h_b_norm5, emb)  # YOUR PATTERN: ffn(norm, emb)
+        else:
+            # Apply feedforward networks to dancers (FIXED - exactly matching your FFN pattern)
+            h_a_norm4 = self.dancer_a_norm4(h_a_interact)
+            h_b_norm4 = self.dancer_b_norm4(h_b_interact)
+            h_a_final = h_a_interact + self.dancer_a_ffn(h_a_norm4, emb)  # YOUR PATTERN: ffn(norm, emb)
+            h_b_final = h_b_interact + self.dancer_b_ffn(h_b_norm4, emb)  # YOUR PATTERN: ffn(norm, emb)
+        
+        return h_a_final, h_b_final, music_emb
 
 class RetrievalFlowMatching_Duet(nn.Module):
     """

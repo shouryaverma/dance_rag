@@ -289,8 +289,8 @@ class LitTrainModelWithRetrieval(pl.LightningModule):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description="Enhanced Duet Training with Retrieval")
-    parser.add_argument("--model_cfg", type=str, default="configs/model_enhanced_duet_debug.yaml", help="")
-    parser.add_argument("--train_cfg", type=str, default="configs/train_enhanced_duet_debug.yaml", help="")
+    parser.add_argument("--model_cfg", type=str, default="configs/model_retrieval_debug.yaml", help="")
+    parser.add_argument("--train_cfg", type=str, default="configs/train_retrieval_debug.yaml", help="")
     parser.add_argument("--data_cfg", type=str, default="configs/datasets_duet.yaml", help="")
     parser.add_argument("--prepare_db_only", action="store_true", help="Only prepare database and exit")
     args = parser.parse_args()
