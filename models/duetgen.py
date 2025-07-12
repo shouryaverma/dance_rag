@@ -59,12 +59,35 @@ class DuetModel(nn.Module):
         
         # Token cache for efficiency
         self._token_cache = {}
+
+        # Create CLIP interface for retrieval database
+        self.clip_for_retrieval = type('CLIPForRetrieval', (), {
+            'encode_text': self.encode_text_for_retrieval,
+            'token_embedding': self.token_embedding,
+            'transformer': self.clip_transformer,
+            'positional_embedding': self.positional_embedding,
+            'ln_final': self.ln_final,
+            'dtype': self.dtype
+        })()
     
     def compute_loss(self, batch):
         """Compute training loss"""
         batch = self.text_process(batch)
+        batch['clip_model'] = self.clip_for_retrieval
         losses = self.decoder.compute_loss(batch)
         return losses["total"], losses
+    
+    def encode_text_for_retrieval(self, text_tokens):
+        """Simplified CLIP text encoding for retrieval similarity"""
+        with torch.no_grad():
+            x = self.token_embedding(text_tokens).type(self.dtype)
+            x = x + self.positional_embedding.type(self.dtype)
+            x = x.permute(1, 0, 2)
+            x = self.clip_transformer(x)
+            x = self.ln_final(x.permute(1, 0, 2)).type(self.dtype)
+            # Take the EOS token representation
+            eot_indices = text_tokens.argmax(dim=-1)
+            return x[torch.arange(x.shape[0]), eot_indices]
     
     def decode_motion(self, batch):
         """Generate motion sequence"""
@@ -78,6 +101,7 @@ class DuetModel(nn.Module):
     def forward_test(self, batch):
         """Forward pass during inference"""
         batch = self.text_process(batch)
+        batch["clip_model"] = self.clip_for_retrieval
         batch.update(self.decode_motion(batch))
         return batch
     

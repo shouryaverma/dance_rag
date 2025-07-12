@@ -8,3 +8,4 @@ cache
 eval_model
 output.log
 *.log
+data

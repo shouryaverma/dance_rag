@@ -49,9 +49,14 @@ class MultiScaleVanillaDuetBlock(nn.Module):
         self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
         self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
-        
-    def forward(self, x, y, music, emb=None, key_padding_mask=None):
-        
+
+        self.retrieval_to_a_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.retrieval_to_b_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm5 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm5 = nn.LayerNorm(latent_dim)
+
+    def forward(self, x, y, music, emb=None, key_padding_mask=None, re_dict=None):
+
         # Apply multi-scale temporal convolutions
         x_a = x.transpose(1, 2)  # B, T, D → B, D, T
         x_a_temporal_feats1 = self.temporal_conv1(x_a).transpose(1, 2)  # Back to B, T, D
@@ -104,7 +109,26 @@ class MultiScaleVanillaDuetBlock(nn.Module):
         y_norm4 = self.dancer_b_norm4(y_interact)
         x_final = x_interact + self.dancer_a_ffn(x_norm4, emb)
         y_final = y_interact + self.dancer_b_ffn(y_norm4, emb)
-        
+
+        # Apply retrieval conditioning to dancers
+        if re_dict is not None:
+            # Concatenate retrieval motion and text features
+            re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
+            re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
+            re_features = torch.cat([re_motion, re_text], dim=1)
+
+            # Create combined mask
+            re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
+            re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
+            re_combined_mask = torch.cat([re_motion_mask, re_text_mask], dim=1)
+            re_key_padding_mask = ~(re_combined_mask > 0.5)
+
+            # Apply retrieval conditioning to both dancers
+            x_norm5 = self.dancer_a_norm5(x_final)
+            y_norm5 = self.dancer_b_norm5(y_final)
+            x_final = x_final + self.retrieval_to_a_attn(x_norm5, re_features, emb, re_key_padding_mask)
+            y_final = y_final + self.retrieval_to_b_attn(y_norm5, re_features, emb, re_key_padding_mask)
+
         return x_final, y_final, music
     
 class VanillaDuetBlock(nn.Module):
@@ -125,8 +149,11 @@ class VanillaDuetBlock(nn.Module):
             **kwargs
         )
         
-    def forward(self, x, y, music, emb=None, key_padding_mask=None):
-        return self.custom_block(x, y, music, emb, key_padding_mask)
+    # def forward(self, x, y, music, emb=None, key_padding_mask=None):
+    #     return self.custom_block(x, y, music, emb, key_padding_mask)
+
+    def forward(self, x, y, music, emb=None, key_padding_mask=None, re_dict=None):
+        return self.custom_block(x, y, music, emb, key_padding_mask, re_dict)
 
 class MultiScaleFlashDuetBlock(nn.Module):
     """using Flash Attention for duet dancing"""
@@ -176,8 +203,14 @@ class MultiScaleFlashDuetBlock(nn.Module):
         self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
         self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
-       
-    def forward(self, x, y, music, emb=None, key_padding_mask=None):
+
+        # Retrieval cross-attention: retrieved features → dancers
+        self.retrieval_to_a_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.retrieval_to_b_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm5 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm5 = nn.LayerNorm(latent_dim)
+
+    def forward(self, x, y, music, emb=None, key_padding_mask=None, re_dict=None):
 
         # Apply multi-scale temporal convolutions
         x_a = x.transpose(1, 2)  # B, T, D → B, D, T
@@ -231,6 +264,25 @@ class MultiScaleFlashDuetBlock(nn.Module):
         y_norm4 = self.dancer_b_norm4(y_interact)
         x_final = x_interact + self.dancer_a_ffn(x_norm4, emb)
         y_final = y_interact + self.dancer_b_ffn(y_norm4, emb)
+
+        # Apply retrieval conditioning to dancers
+        if re_dict is not None:
+            # Concatenate retrieval motion and text features
+            re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
+            re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
+            re_features = torch.cat([re_motion, re_text], dim=1)
+
+            # Create combined mask
+            re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
+            re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
+            re_combined_mask = torch.cat([re_motion_mask, re_text_mask], dim=1)
+            re_key_padding_mask = ~(re_combined_mask > 0.5)
+
+            # Apply retrieval conditioning to both dancers
+            x_norm5 = self.dancer_a_norm5(x_final)
+            y_norm5 = self.dancer_b_norm5(y_final)
+            x_final = x_final + self.retrieval_to_a_attn(x_norm5, re_features, emb, re_key_padding_mask)
+            y_final = y_final + self.retrieval_to_b_attn(y_norm5, re_features, emb, re_key_padding_mask)
        
         return x_final, y_final, music
 
@@ -253,8 +305,11 @@ class FlashDuetBlock(nn.Module):
             **kwargs
         )
        
-    def forward(self, x, y, music, emb=None, key_padding_mask=None):
-        return self.custom_block(x, y, music, emb, key_padding_mask)
+    # def forward(self, x, y, music, emb=None, key_padding_mask=None):
+    #     return self.custom_block(x, y, music, emb, key_padding_mask)
+
+    def forward(self, x, y, music, emb=None, key_padding_mask=None, re_dict=None):
+        return self.custom_block(x, y, music, emb, key_padding_mask, re_dict)
 
 class MultiScaleVanillaReactBlock(nn.Module):
     """using Vanilla Attention for reactive following"""
