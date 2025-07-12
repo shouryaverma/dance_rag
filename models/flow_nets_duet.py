@@ -132,7 +132,7 @@ class FlowNet_Duet(nn.Module):
             # Apply retrieval conditioning mask
             if re_dict is not None:
                 retr_mask = retr_cond_active.view(B, 1, 1, 1)  # Shape for broadcasting
-                for key in ['re_motion', 're_text']:
+                for key in ['re_motion', 're_text', 're_music']:
                     if key in re_dict:
                         re_dict[key] = re_dict[key] * retr_mask
 
@@ -513,6 +513,14 @@ class RetrievalDatabase_Duet(nn.Module):
 
         # Add text projection to match latent_dim
         self.text_proj = nn.Linear(768, self.latent_dim)
+
+        sample_music = self.music_features[0]
+        actual_music_dim = sample_music.shape[-1]
+        print(f"Sample music feature shape: {sample_music.shape}")
+        print(f"Actual music feature dimension: {actual_music_dim}")
+
+        self.music_proj = nn.Linear(actual_music_dim, self.latent_dim)
+        print(f"Music projection layer created with input dim {actual_music_dim} and output dim {self.latent_dim}")
         
         # Cache for retrieval results
         self.results_cache = {}
@@ -634,6 +642,41 @@ class RetrievalDatabase_Duet(nn.Module):
         
         return re_text
     
+    def process_retrieved_music(self, indices, device):
+        """Process retrieved music features"""
+        retrieved_music = []
+        
+        for idx in indices:
+            music_feat = self.music_features[idx]  # Should be (T, music_dim)
+            retrieved_music.append(music_feat)
+        
+        # Find max length and pad
+        max_length = max(len(music) for music in retrieved_music)
+        max_length = min(max_length, self.motion_pos_embedding.shape[0])
+        
+        # Pad all music features to same length
+        padded_music = []
+        for music in retrieved_music:
+            current_length = len(music)
+            if current_length >= max_length:
+                padded_music.append(music[:max_length])
+            else:
+                padding_needed = max_length - current_length
+                padding = np.zeros((padding_needed, music.shape[1]), dtype=music.dtype)
+                padded_music.append(np.concatenate([music, padding], axis=0))
+        
+        # Stack and convert to tensor
+        retrieved_music = torch.Tensor(np.stack(padded_music)).to(device)
+        
+        # Project to latent space (add this projection layer to __init__)
+        # self.music_proj = nn.Linear(music_dim, self.latent_dim)
+        re_music = self.music_proj(retrieved_music) + self.motion_pos_embedding[:max_length].unsqueeze(0)
+        
+        # Apply stride
+        re_music = re_music[:, ::self.stride, :].contiguous()
+        
+        return re_music
+    
     def forward(self, captions, lengths, clip_model, device, idx=None):
         """
         Main forward pass that performs retrieval and feature processing
@@ -656,6 +699,10 @@ class RetrievalDatabase_Duet(nn.Module):
         # Process retrieved texts  
         re_text = self.process_retrieved_texts(all_indices, device)
         re_text = re_text.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+
+        # Process retrieved music
+        re_music = self.process_retrieved_music(all_indices, device)
+        re_music = re_music.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
         
         # Create proper masks for retrieved sequences (accounting for padding)
         re_mask = torch.ones(B, self.num_retrieval, re_motion.shape[2], device=device)
@@ -673,7 +720,8 @@ class RetrievalDatabase_Duet(nn.Module):
         
         re_dict = {
             're_text': re_text,
-            're_motion': re_motion, 
+            're_motion': re_motion,
+            're_music': re_music,
             're_mask': re_mask
         }
         

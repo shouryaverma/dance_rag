@@ -115,12 +115,14 @@ class MultiScaleVanillaDuetBlock(nn.Module):
             # Concatenate retrieval motion and text features
             re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
             re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
-            re_features = torch.cat([re_motion, re_text], dim=1)
+            re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
+            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
 
             # Create combined mask
             re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
             re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
-            re_combined_mask = torch.cat([re_motion_mask, re_text_mask], dim=1)
+            re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
+            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning to both dancers
@@ -270,12 +272,14 @@ class MultiScaleFlashDuetBlock(nn.Module):
             # Concatenate retrieval motion and text features
             re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
             re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
-            re_features = torch.cat([re_motion, re_text], dim=1)
+            re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
+            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
 
             # Create combined mask
             re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
             re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
-            re_combined_mask = torch.cat([re_motion_mask, re_text_mask], dim=1)
+            re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
+            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning to both dancers
