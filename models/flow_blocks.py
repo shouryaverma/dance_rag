@@ -355,8 +355,12 @@ class MultiScaleVanillaReactBlock(nn.Module):
         # Feedforward network for follower
         self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.follower_norm4 = nn.LayerNorm(latent_dim)
+
+        # Retrieval cross-attention for follower
+        self.retrieval_to_follower_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.follower_norm5 = nn.LayerNorm(latent_dim)
        
-    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None, re_dict=None):
         # Apply multi-scale temporal convolutions
         follower_t = follower.transpose(1, 2)  # B, T, D → B, D, T
         
@@ -390,6 +394,28 @@ class MultiScaleVanillaReactBlock(nn.Module):
         # Apply feedforward network to follower
         follower_norm4 = self.follower_norm4(follower_react)
         follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
+
+        # Apply retrieval conditioning to follower
+        if re_dict is not None:
+            # Concatenate ALL retrieval features: motion + text + music
+            re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
+            
+            # Combine all retrieval modalities
+            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+
+            # Create combined mask for all modalities
+            re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
+            re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
+            re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)  # Same as motion
+            
+            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            re_key_padding_mask = ~(re_combined_mask > 0.5)
+
+            # Apply retrieval conditioning ONLY to follower (lead dancer unchanged)
+            follower_norm5 = self.follower_norm5(follower_final)
+            follower_final = follower_final + self.retrieval_to_follower_attn(follower_norm5, re_features, emb, re_key_padding_mask)
        
         # Return the updated follower state, keeping lead and music unchanged
         return lead, follower_final, music
@@ -412,9 +438,9 @@ class VanillaReactBlock(nn.Module):
             dropout=dropout,
             **kwargs
         )
-       
-    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
-        return self.custom_block(lead, follower, music, emb, key_padding_mask)
+
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None, re_dict=None):
+        return self.custom_block(lead, follower, music, emb, key_padding_mask, re_dict)
 
 class MultiScaleFlashReactBlock(nn.Module):
     """MultiScale Flash Attention for reactive following with multi-resolution temporal modeling"""
@@ -456,8 +482,12 @@ class MultiScaleFlashReactBlock(nn.Module):
         # Feedforward network for follower
         self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.follower_norm4 = nn.LayerNorm(latent_dim)
+
+        # Retrieval cross-attention for follower
+        self.retrieval_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.follower_norm5 = nn.LayerNorm(latent_dim)
        
-    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None, re_dict=None):
         # Apply multi-scale temporal convolutions
         follower_t = follower.transpose(1, 2)  # B, T, D → B, D, T
         
@@ -491,7 +521,28 @@ class MultiScaleFlashReactBlock(nn.Module):
         # Apply feedforward network to follower
         follower_norm4 = self.follower_norm4(follower_react)
         follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
-       
+
+        if re_dict is not None:
+            # Concatenate ALL retrieval features: motion + text + music
+            re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
+            
+            # Combine all retrieval modalities
+            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+
+            # Create combined mask for all modalities
+            re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
+            re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
+            re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
+            
+            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            re_key_padding_mask = ~(re_combined_mask > 0.5)
+
+            # Apply retrieval conditioning ONLY to follower
+            follower_norm5 = self.follower_norm5(follower_final)
+            follower_final = follower_final + self.retrieval_to_follower_attn(follower_norm5, re_features, emb, re_key_padding_mask)
+ 
         # Return the updated follower state, keeping lead and music
         return lead, follower_final, music
 
@@ -513,6 +564,6 @@ class FlashReactBlock(nn.Module):
             dropout=dropout,
             **kwargs
         )
-        
-    def forward(self, lead, follower, music, emb=None, key_padding_mask=None):
-        return self.custom_block(lead, follower, music, emb, key_padding_mask)
+
+    def forward(self, lead, follower, music, emb=None, key_padding_mask=None, re_dict=None):
+        return self.custom_block(lead, follower, music, emb, key_padding_mask, re_dict)
