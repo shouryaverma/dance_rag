@@ -12,6 +12,25 @@ class FlowType(Enum):
     RECTIFIED = "rectified"
     LINEAR = "linear"
 
+def mean_flat(x, temperature=1.0, **kwargs):
+    """
+    Take the mean over all non-batch dimensions.
+    """
+    return torch.mean(x, dim=list(range(1, len(x.size()))))
+
+def class_conditioned_sampling(labels):
+    bsz = labels.shape[0]
+    mask = ~(labels[None] == labels[:, None])
+    weights = mask.float()
+    weights_sum = weights.sum(dim=1, keepdim=True)
+    if (weights_sum == 0).any():
+        choices = torch.randint(0, bsz, (bsz,), device=labels.device)
+    else:
+        weights = weights / weights_sum.clamp(min=1)
+        choices = torch.multinomial(weights, 1).squeeze(1)
+    assert (choices != torch.arange(bsz, device=labels.device)).all(), "Self-sampling detected"
+    return choices
+
 class RectifiedFlow:
     """
     Implementation of Rectified Flow with discrete timesteps.
@@ -22,7 +41,11 @@ class RectifiedFlow:
         num_timesteps=1000, 
         flow_type=FlowType.RECTIFIED,
         rescale_timesteps=False,
-        motion_rep="global"
+        motion_rep="global",
+
+        use_contrastive=True,
+        contrastive_weight=0.05,
+        null_class_idx=None,
     ):
         self.num_timesteps = num_timesteps
         self.flow_type = flow_type
@@ -32,7 +55,12 @@ class RectifiedFlow:
         
         # Set up timesteps
         self.timesteps = torch.linspace(0, 1, num_timesteps)
-        
+
+        # Contrastive loss parameters
+        self.use_contrastive = use_contrastive
+        self.contrastive_weight = contrastive_weight
+        self.null_class_idx = null_class_idx
+
     def interpolate(self, x0, x1, t):
         """
         Interpolate between x0 and x1 at time t.
@@ -47,6 +75,16 @@ class RectifiedFlow:
         For rectified flow, the velocity field is a constant (x1 - x0)
         """
         return x1 - x0
+    
+    def get_interpolant_derivatives(self, t):
+        """
+        Get derivatives for rectified flow interpolation.
+        For rectified flow: x_t = (1-t)*x0 + t*x1
+        So: d_alpha_t = -1, d_sigma_t = 1
+        """
+        d_alpha_t = -torch.ones_like(t)
+        d_sigma_t = torch.ones_like(t)
+        return d_alpha_t, d_sigma_t
     
     def sample_noise(self, shape, device):
         """
@@ -65,10 +103,70 @@ class RectifiedFlow:
         x_t = self.interpolate(x_start, noise, t_normalized)
         
         return x_t, noise
-    
-    def compute_loss(self, model, x_start, t, mask=None, timestep_mask=None, t_bar=None, mode="duet", model_kwargs=None):
+
+    def compute_triplet_loss_efficiently(self, x, y, labels=None):
         """
-        Compute the loss for training the flow model.
+        Compute triplet contrastive loss efficiently.
+        """
+        x = x.flatten(1)
+        y = y.flatten(1)
+        
+        # Normalize to unit scale to prevent explosion
+        x_norm = torch.nn.functional.normalize(x, dim=-1)
+        y_norm = torch.nn.functional.normalize(y, dim=-1)
+        
+        # Positive error (cosine distance)
+        pos_error = 1 - torch.sum(x_norm * y_norm, dim=-1)  # Shape: (B,)
+        
+        bsz = x.shape[0]
+        if bsz < 2:
+            # Skip contrastive loss if batch size too small
+            return {
+                "contrastive_loss": torch.tensor(0.0, device=x.device),
+                "flow_loss": pos_error.mean(),
+                "negative_loss": torch.tensor(0.0, device=x.device)
+            }
+            
+        # Simpler negative sampling
+        choices = torch.randperm(bsz, device=x.device)
+        choices = torch.roll(choices, 1)  # Shift by 1 to avoid self-pairing
+        
+        y_neg_norm = y_norm[choices]
+        
+        # Negative error (cosine distance)
+        neg_error = 1 - torch.sum(x_norm * y_neg_norm, dim=-1)  # Shape: (B,)
+        
+        # Triplet loss with margin
+        margin = 0.1  # Small margin for stability
+        triplet_loss = torch.clamp(pos_error - neg_error + margin, min=0.0)
+        contrastive_loss = triplet_loss.mean()
+
+        return {
+            "contrastive_loss": contrastive_loss,
+            "flow_loss": pos_error.mean(),
+            "negative_loss": neg_error.mean()
+        }
+    
+    def compute_contrastive_loss(self, pred_velocity, target_data, noise, t_normalized, labels=None):
+        """
+        Compute contrastive loss for rectified flow.
+        """
+        # Get interpolant derivatives for rectified flow
+        d_alpha_t, d_sigma_t = self.get_interpolant_derivatives(t_normalized)
+        d_alpha_t = d_alpha_t.view(-1, 1, 1)
+        d_sigma_t = d_sigma_t.view(-1, 1, 1)
+        
+        # For rectified flow, the target velocity is x1 - x0 = noise - target_data
+        # The model target in velocity space is: d_alpha_t * target_data + d_sigma_t * noise
+        # For rectified flow: d_alpha_t = -1, d_sigma_t = 1
+        # So model_target = -target_data + noise = noise - target_data (which is the true velocity)
+        model_target = d_alpha_t * target_data + d_sigma_t * noise
+        
+        return self.compute_triplet_loss_efficiently(pred_velocity, model_target, labels)
+    
+    def compute_loss(self, model, x_start, t, mask=None, timestep_mask=None, t_bar=None, mode="duet", model_kwargs=None, labels=None):
+        """
+        Compute the loss for training the flow model with optional contrastive loss.
         """
         if model_kwargs is None:
             model_kwargs = {}
@@ -109,6 +207,17 @@ class RectifiedFlow:
         # First compute simple MSE loss
         simple_loss = ((true_velocity - pred_velocity) ** 2).mean()
         losses["simple"] = simple_loss
+        primary_loss = simple_loss
+
+        # Add contrastive loss if enabled
+        if self.use_contrastive:
+            contrastive_losses = self.compute_contrastive_loss(
+                pred_velocity, x_start_normalized, noise, t_normalized, labels
+            )
+            losses.update(contrastive_losses)
+            # Add contrastive to base MSE loss instead of replacing it
+            weighted_contrastive = self.contrastive_weight * contrastive_losses["contrastive_loss"]
+            primary_loss = simple_loss + weighted_contrastive
         
         # Apply specialized motion losses if mask is provided and we're using global representation
         if mask is not None and self.motion_rep == "global":
@@ -127,17 +236,26 @@ class RectifiedFlow:
             loss_b_manager = GeometricLoss("l2", 22, "B")
             loss_b_manager.forward(prediction[...,1,:], target[...,1,:], mask[...,0,:], timestep_mask)
             
-            # Combine all losses
-            losses.update(loss_a_manager.losses)
-            losses.update(loss_b_manager.losses)
-            losses.update(interloss_manager.losses)
+            # Combine motion losses
+            motion_losses = {}
+            motion_losses.update(loss_a_manager.losses)
+            motion_losses.update(loss_b_manager.losses)
+            motion_losses.update(interloss_manager.losses)
+            
             if mode=="duet":
-                losses["total"] = loss_a_manager.losses["A"] + loss_b_manager.losses["B"] + interloss_manager.losses["total"]
+                motion_total = loss_a_manager.losses["A"] + loss_b_manager.losses["B"] + interloss_manager.losses["total"]
             else:
-                losses["total"] = loss_a_manager.losses["A"]*0.001 + loss_b_manager.losses["B"]*1.0 + interloss_manager.losses["total"]
-
+                motion_total = loss_a_manager.losses["A"]*0.001 + loss_b_manager.losses["B"]*1.0 + interloss_manager.losses["total"]
+            
+            # Combine contrastive and motion losses
+            if self.use_contrastive:
+                losses["motion_total"] = motion_total
+                losses["total"] = primary_loss + motion_total
+            else:
+                losses.update(motion_losses)
+                losses["total"] = motion_total
         else:
-            losses["total"] = simple_loss
+            losses["total"] = primary_loss
         
         return losses
     

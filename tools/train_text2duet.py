@@ -69,7 +69,7 @@ class LitTrainModel(pl.LightningModule):
 
     def plot_motion_intergen(self, gt_motion1, gt_motion2, gen_motion1, gen_motion2, length, result_root, caption, mode='train', idx=0):
         # only plot in the main process
-        if self.device.index != 0:
+        if self.trainer.global_rank != 0:
             return
         
         gt_motion1 = gt_motion1.cpu().numpy()[:length]
@@ -202,8 +202,8 @@ class LitTrainModel(pl.LightningModule):
         return loss, loss_logs
 
     def on_train_start(self):
-        self.rank = 0
-        self.world_size = 1
+        self.rank = self.trainer.global_rank
+        self.world_size = self.trainer.world_size
         self.start_time = time.time()
         self.it = self.cfg.TRAIN.LAST_ITER if self.cfg.TRAIN.LAST_ITER else 0
         self.epoch = self.cfg.TRAIN.LAST_EPOCH if self.cfg.TRAIN.LAST_EPOCH else 0
@@ -241,7 +241,7 @@ class LitTrainModel(pl.LightningModule):
                 self.logs[k] += v.item()
 
         self.it += 1
-        if self.it % self.cfg.TRAIN.LOG_STEPS == 0 and self.device.index == 0:
+        if self.it % self.cfg.TRAIN.LOG_STEPS == 0 and self.trainer.global_rank == 0:
             mean_loss = OrderedDict({})
             for tag, value in self.logs.items():
                 mean_loss[tag] = value / self.cfg.TRAIN.LOG_STEPS
@@ -332,11 +332,11 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         default_root_dir=litmodel.model_dir,
         # devices="auto",
-        devices=1,
+        devices=8,
         accelerator='gpu',
         max_epochs=train_cfg.TRAIN.EPOCH,
-        # strategy=DDPStrategy(find_unused_parameters=True),
-        strategy=None,
+        strategy=DDPStrategy(find_unused_parameters=True),
+        # strategy="auto",
         precision=32,
         callbacks=[checkpoint_callback, CustomCheckpointCallback()],
         check_val_every_n_epoch = train_cfg.TRAIN.SAVE_EPOCH,

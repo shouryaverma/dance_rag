@@ -1,8 +1,8 @@
-# NAME: DuetModel
-# NUM_LAYERS: 4
+NAME: DuetModel
+NUM_LAYERS: 6
 
-NAME: ReactModel
-NUM_LAYERS: 4
+# NAME: ReactModel
+# NUM_LAYERS: 4
 
 NUM_HEADS: 8
 DROPOUT: 0.1

@@ -357,6 +357,7 @@ class MultiScaleVanillaReactBlock(nn.Module):
         self.follower_norm4 = nn.LayerNorm(latent_dim)
 
         # Retrieval cross-attention for follower
+        self.retrieval_proj = nn.Linear(484, 512)
         self.retrieval_to_follower_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.follower_norm5 = nn.LayerNorm(latent_dim)
        
@@ -401,6 +402,12 @@ class MultiScaleVanillaReactBlock(nn.Module):
             re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
+
+        if re_motion.shape[-1] != follower.shape[-1]:
+            # Add a projection layer in __init__: self.retrieval_proj = nn.Linear(484, 512)
+            re_motion = self.retrieval_proj(re_motion)
+            re_text = self.retrieval_proj(re_text) 
+            re_music = self.retrieval_proj(re_music)
             
             # Combine all retrieval modalities
             re_features = torch.cat([re_motion, re_text, re_music], dim=1)
@@ -484,6 +491,7 @@ class MultiScaleFlashReactBlock(nn.Module):
         self.follower_norm4 = nn.LayerNorm(latent_dim)
 
         # Retrieval cross-attention for follower
+        self.retrieval_proj = nn.Linear(484, 512)
         self.retrieval_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.follower_norm5 = nn.LayerNorm(latent_dim)
        
@@ -527,6 +535,12 @@ class MultiScaleFlashReactBlock(nn.Module):
             re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
+
+        if re_motion.shape[-1] != follower.shape[-1]:
+            # Add a projection layer in __init__: self.retrieval_proj = nn.Linear(484, 512)
+            re_motion = self.retrieval_proj(re_motion)
+            re_text = self.retrieval_proj(re_text) 
+            re_music = self.retrieval_proj(re_music)
             
             # Combine all retrieval modalities
             re_features = torch.cat([re_motion, re_text, re_music], dim=1)
