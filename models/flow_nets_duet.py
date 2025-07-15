@@ -472,15 +472,30 @@ class RetrievalDatabase_Duet(nn.Module):
         
         # Load text features - should be (N, 768) float32 array
         self.text_features = torch.from_numpy(data['text_features'])
+        self.spatial_features = torch.from_numpy(data['spatial_features']) 
+        self.body_features = torch.from_numpy(data['body_features'])
+        self.rhythm_features = torch.from_numpy(data['rhythm_features'])
+
         print(f"Loaded text features: {self.text_features.shape}")
-        
+        print(f"Loaded spatial features: {self.spatial_features.shape}")
+        print(f"Loaded body features: {self.body_features.shape}")
+        print(f"Loaded rhythm features: {self.rhythm_features.shape}")
+
         # Load other data
         self.text_strings = data['text_strings']
+        self.spatial_texts = data['spatial_texts']
+        self.body_texts = data['body_texts'] 
+        self.rhythm_texts = data['rhythm_texts']
+
         self.lead_motions = data['lead_motions'] 
         self.follow_motions = data['follow_motions']
         self.motion_lengths = data['motion_lengths']
         self.music_features = data['music_features']
+
         self.clip_seq_features = data['clip_seq_features']
+        self.spatial_clip_seq_features = data['spatial_clip_seq_features']
+        self.body_clip_seq_features = data['body_clip_seq_features']
+        self.rhythm_clip_seq_features = data['rhythm_clip_seq_features']
         
         # DEBUG: Check actual motion dimensions
         sample_lead = self.lead_motions[0]
@@ -622,25 +637,36 @@ class RetrievalDatabase_Duet(nn.Module):
 
     def process_retrieved_texts(self, indices, device):
         """Process retrieved text features through text encoder"""
-        # Get CLIP sequence features for retrieved texts
-        retrieved_clip_features = []
+        # Get CLIP sequence features for all three text types
+        retrieved_spatial_features = []
+        retrieved_body_features = []
+        retrieved_rhythm_features = []
+        
         for idx in indices:
-            clip_feat = self.clip_seq_features[idx]  # Shape: (77, 768)
-            retrieved_clip_features.append(clip_feat)
+            spatial_feat = self.spatial_clip_seq_features[idx]  # Shape: (77, 768)
+            body_feat = self.body_clip_seq_features[idx]      # Shape: (77, 768)  
+            rhythm_feat = self.rhythm_clip_seq_features[idx]   # Shape: (77, 768)
+            
+            retrieved_spatial_features.append(spatial_feat)
+            retrieved_body_features.append(body_feat)
+            retrieved_rhythm_features.append(rhythm_feat)
         
-        # Stack into (num_retrieval, 77, 768)
-        retrieved_clip_features = torch.Tensor(np.stack(retrieved_clip_features)).to(device)
+        # Stack each type into (num_retrieval, 77, 768)
+        retrieved_spatial = torch.Tensor(np.stack(retrieved_spatial_features)).to(device)
+        retrieved_body = torch.Tensor(np.stack(retrieved_body_features)).to(device)
+        retrieved_rhythm = torch.Tensor(np.stack(retrieved_rhythm_features)).to(device)
         
-        # Process through text encoder (batch_first=True)
-        re_text = self.text_encoder(retrieved_clip_features)
-        
-        # Take the last token representation (EOS token)
-        re_text = re_text[:, -1:, :].contiguous()  # Shape: (N, 1, 768)
+        # Process through text encoder
+        re_spatial = self.text_encoder(retrieved_spatial)[:, -1:, :].contiguous()
+        re_body = self.text_encoder(retrieved_body)[:, -1:, :].contiguous()  
+        re_rhythm = self.text_encoder(retrieved_rhythm)[:, -1:, :].contiguous()
         
         # Project to latent dimension
-        re_text = self.text_proj(re_text)  # Shape: (N, 1, 512)
+        re_spatial = self.text_proj(re_spatial)  # Shape: (N, 1, 512)
+        re_body = self.text_proj(re_body)        # Shape: (N, 1, 512)
+        re_rhythm = self.text_proj(re_rhythm)    # Shape: (N, 1, 512)
         
-        return re_text
+        return re_spatial, re_body, re_rhythm
     
     def process_retrieved_music(self, indices, device):
         """Process retrieved music features"""
@@ -697,8 +723,13 @@ class RetrievalDatabase_Duet(nn.Module):
         re_motion = re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
         
         # Process retrieved texts  
-        re_text = self.process_retrieved_texts(all_indices, device)
-        re_text = re_text.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        # re_text = self.process_retrieved_texts(all_indices, device)
+        # re_text = re_text.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        # Process retrieved texts (now returns 3 types)
+        re_spatial, re_body, re_rhythm = self.process_retrieved_texts(all_indices, device)
+        re_spatial = re_spatial.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        re_body = re_body.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        re_rhythm = re_rhythm.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
 
         # Process retrieved music
         re_music = self.process_retrieved_music(all_indices, device)
@@ -719,7 +750,10 @@ class RetrievalDatabase_Duet(nn.Module):
                     re_mask[b_idx, r_idx, actual_length_strided:] = 0
         
         re_dict = {
-            're_text': re_text,
+            # 're_text': re_text,
+            're_spatial': re_spatial,
+            're_body': re_body, 
+            're_rhythm': re_rhythm,
             're_motion': re_motion,
             're_music': re_music,
             're_mask': re_mask

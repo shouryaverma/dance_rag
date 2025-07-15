@@ -26,6 +26,7 @@ class InterLoss(nn.Module):
         self.weights["RO"] = 0.01
         self.weights["JA"] = 3
         self.weights["DM"] = 3
+        self.weights["SYNC"] = 5
 
         self.losses = {}
 
@@ -61,6 +62,7 @@ class InterLoss(nn.Module):
         self.forward_distance_map(thresh=1)
         self.forward_joint_affinity(thresh=0.1)
         self.forward_relatvie_rot()
+        self.forward_synchronization_loss()
         self.accum_loss()
 
 
@@ -126,6 +128,52 @@ class InterLoss(nn.Module):
         self.losses["JA"] = self.mix_masked_mse(pred_distance_matrix, torch.zeros_like(tgt_distance_matrix),
                                                                 self.mask[..., 0:1, :],
                                                                 self.timestep_mask, dm_mask=distance_matrix_mask) * self.weights["JA"]
+    
+    def forward_synchronization_loss(self):
+        """
+        Enforces synchronization fidelity between two dancers using relative joint distances
+        with distance-aware and joint-specific weighting.
+        """
+        # Extract joint positions for both dancers
+        pred_joints_A = self.pred_g_joints[..., 0, :, :]  # [B, T, J, 3]
+        pred_joints_B = self.pred_g_joints[..., 1, :, :]  # [B, T, J, 3]
+        tgt_joints_A = self.tgt_g_joints[..., 0, :, :]   # [B, T, J, 3]
+        tgt_joints_B = self.tgt_g_joints[..., 1, :, :]   # [B, T, J, 3]
+        
+        # Joint-specific weights (higher for end-effectors)
+        joint_weights = torch.ones(self.nb_joints, device=pred_joints_A.device)
+        # End-effector indices: hands, feet (adjust indices based on your skeleton)
+        end_effector_indices = [7, 10, 8, 11]  # Using your fids as example
+        joint_weights[end_effector_indices] = 3.0
+        
+        # Compute pairwise distances between all joints of A and B
+        # pred_joints_A: [B, T, J, 3] -> [B, T, J, 1, 3]
+        # pred_joints_B: [B, T, J, 3] -> [B, T, 1, J, 3]
+        pred_distances_AB = torch.cdist(pred_joints_A, pred_joints_B)  # [B, T, J, J]
+        tgt_distances_AB = torch.cdist(tgt_joints_A, tgt_joints_B)    # [B, T, J, J]
+        
+        # Distance-aware exponential weighting
+        distance_weights = torch.exp(-tgt_distances_AB)  # [B, T, J, J]
+        
+        # Joint-specific weighting matrix
+        joint_weight_matrix = joint_weights.unsqueeze(-1) * joint_weights.unsqueeze(0)  # [J, J]
+        joint_weight_matrix = joint_weight_matrix.unsqueeze(0).unsqueeze(0)  # [1, 1, J, J]
+        
+        # Combined weighting
+        total_weights = distance_weights * joint_weight_matrix  # [B, T, J, J]
+        
+        # Weighted relative distance loss
+        distance_diff = pred_distances_AB - tgt_distances_AB  # [B, T, J, J]
+        weighted_loss = (distance_diff ** 2) * total_weights  # [B, T, J, J]
+        
+        # Normalize by sum of weights and number of joint pairs
+        loss_per_frame = weighted_loss.sum(dim=(-1, -2)) / (total_weights.sum(dim=(-1, -2)) + 1e-7)  # [B, T]
+        
+        # Since synchronization loss is computed per frame for both dancers jointly,
+        frame_mask = self.mask[..., 0, 0]  # Extract [B, T] from [B, T, 2, 1]
+        masked_loss = (loss_per_frame * frame_mask).sum() / (frame_mask.sum() + 1e-7)
+        
+        self.losses["SYNC"] = masked_loss * self.weights["SYNC"]
 
     def accum_loss(self):
         loss = 0

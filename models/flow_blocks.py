@@ -113,16 +113,33 @@ class MultiScaleVanillaDuetBlock(nn.Module):
         # Apply retrieval conditioning to dancers
         if re_dict is not None:
             # Concatenate retrieval motion and text features
-            re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
-            re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
-            re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
-            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+            # re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
+            # re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
+            # re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
+            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+
+            # # Create combined mask
+            # re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
+            # re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
+            # re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
+            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            
+            # Concatenate retrieval motion and all text features
+            re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])
+            re_spatial = re_dict['re_spatial'].reshape(x.shape[0], -1, x.shape[-1])
+            re_body = re_dict['re_body'].reshape(x.shape[0], -1, x.shape[-1])
+            re_rhythm = re_dict['re_rhythm'].reshape(x.shape[0], -1, x.shape[-1])
+            re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])
+            re_features = torch.cat([re_motion, re_spatial, re_body, re_rhythm, re_music], dim=1)
 
             # Create combined mask
             re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
-            re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
+            re_spatial_mask = torch.ones(re_spatial.shape[:2], device=x.device)
+            re_body_mask = torch.ones(re_body.shape[:2], device=x.device)
+            re_rhythm_mask = torch.ones(re_rhythm.shape[:2], device=x.device)
             re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
-            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            re_combined_mask = torch.cat([re_motion_mask, re_spatial_mask, re_body_mask, re_rhythm_mask, re_music_mask], dim=1)
+
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning to both dancers
@@ -270,16 +287,33 @@ class MultiScaleFlashDuetBlock(nn.Module):
         # Apply retrieval conditioning to dancers
         if re_dict is not None:
             # Concatenate retrieval motion and text features
-            re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
-            re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
-            re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
-            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+            # re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
+            # re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
+            # re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
+            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+
+            # # Create combined mask
+            # re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
+            # re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
+            # re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
+            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+
+            # Concatenate retrieval motion and all text features
+            re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])
+            re_spatial = re_dict['re_spatial'].reshape(x.shape[0], -1, x.shape[-1])
+            re_body = re_dict['re_body'].reshape(x.shape[0], -1, x.shape[-1])
+            re_rhythm = re_dict['re_rhythm'].reshape(x.shape[0], -1, x.shape[-1])
+            re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])
+            re_features = torch.cat([re_motion, re_spatial, re_body, re_rhythm, re_music], dim=1)
 
             # Create combined mask
             re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
-            re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
+            re_spatial_mask = torch.ones(re_spatial.shape[:2], device=x.device)
+            re_body_mask = torch.ones(re_body.shape[:2], device=x.device)
+            re_rhythm_mask = torch.ones(re_rhythm.shape[:2], device=x.device)
             re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
-            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            re_combined_mask = torch.cat([re_motion_mask, re_spatial_mask, re_body_mask, re_rhythm_mask, re_music_mask], dim=1)
+
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning to both dancers
@@ -399,25 +433,37 @@ class MultiScaleVanillaReactBlock(nn.Module):
         # Apply retrieval conditioning to follower
         if re_dict is not None:
             # Concatenate ALL retrieval features: motion + text + music
-            re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
-            re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
+            # re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_spatial = re_dict['re_spatial'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_body = re_dict['re_body'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_rhythm = re_dict['re_rhythm'].reshape(follower.shape[0], -1, follower.shape[-1])
 
         if re_motion.shape[-1] != follower.shape[-1]:
             # Add a projection layer in __init__: self.retrieval_proj = nn.Linear(484, 512)
-            re_motion = self.retrieval_proj(re_motion)
-            re_text = self.retrieval_proj(re_text) 
             re_music = self.retrieval_proj(re_music)
-            
+            re_motion = self.retrieval_proj(re_motion)
+            # re_text = self.retrieval_proj(re_text)
+            re_spatial = self.retrieval_proj(re_spatial)
+            re_body = self.retrieval_proj(re_body)
+            re_rhythm = self.retrieval_proj(re_rhythm)
+
             # Combine all retrieval modalities
-            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+            re_features = torch.cat([re_motion, re_spatial, re_body, re_rhythm, re_music], dim=1)
 
             # Create combined mask for all modalities
+            re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
             re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
-            re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
-            re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)  # Same as motion
+            # re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
+
+            re_spatial_mask = torch.ones(re_spatial.shape[:2], device=follower.device)
+            re_body_mask = torch.ones(re_body.shape[:2], device=follower.device)
+            re_rhythm_mask = torch.ones(re_rhythm.shape[:2], device=follower.device)           
             
-            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            re_combined_mask = torch.cat([re_motion_mask, re_spatial_mask, re_body_mask, re_rhythm_mask, re_music_mask], dim=1)
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning ONLY to follower (lead dancer unchanged)
@@ -532,25 +578,39 @@ class MultiScaleFlashReactBlock(nn.Module):
 
         if re_dict is not None:
             # Concatenate ALL retrieval features: motion + text + music
-            re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
-            re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
+
+            # re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_spatial = re_dict['re_spatial'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_body = re_dict['re_body'].reshape(follower.shape[0], -1, follower.shape[-1])
+            re_rhythm = re_dict['re_rhythm'].reshape(follower.shape[0], -1, follower.shape[-1])
 
         if re_motion.shape[-1] != follower.shape[-1]:
             # Add a projection layer in __init__: self.retrieval_proj = nn.Linear(484, 512)
-            re_motion = self.retrieval_proj(re_motion)
-            re_text = self.retrieval_proj(re_text) 
             re_music = self.retrieval_proj(re_music)
+            re_motion = self.retrieval_proj(re_motion)
+
+            # re_text = self.retrieval_proj(re_text)
+            re_spatial = self.retrieval_proj(re_spatial)
+            re_body = self.retrieval_proj(re_body)
+            re_rhythm = self.retrieval_proj(re_rhythm)
             
             # Combine all retrieval modalities
-            re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
+            re_features = torch.cat([re_motion, re_spatial, re_body, re_rhythm, re_music], dim=1)
 
             # Create combined mask for all modalities
-            re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
-            re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
             re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
+            re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
+
+            # re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
+            re_spatial_mask = torch.ones(re_spatial.shape[:2], device=follower.device)
+            re_body_mask = torch.ones(re_body.shape[:2], device=follower.device)
+            re_rhythm_mask = torch.ones(re_rhythm.shape[:2], device=follower.device)   
             
-            re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
+            re_combined_mask = torch.cat([re_motion_mask, re_spatial_mask, re_body_mask, re_rhythm_mask, re_music_mask], dim=1)
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning ONLY to follower
