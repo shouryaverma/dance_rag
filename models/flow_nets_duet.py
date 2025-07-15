@@ -132,7 +132,7 @@ class FlowNet_Duet(nn.Module):
             # Apply retrieval conditioning mask
             if re_dict is not None:
                 retr_mask = retr_cond_active.view(B, 1, 1, 1)  # Shape for broadcasting
-                for key in ['re_motion', 're_text', 're_music']:
+                for key in ['re_motion', 're_spatial', 're_body', 're_rhythm', 're_music']:
                     if key in re_dict:
                         re_dict[key] = re_dict[key] * retr_mask
 
@@ -281,7 +281,10 @@ class FlowMatching_Duet(nn.Module):
             motion_lens = batch["motion_lens"]
             clip_model = batch.get("clip_model", None)
             if clip_model is not None and text_list:
-                re_dict = self.database(text_list, motion_lens, clip_model, x_start.device)
+                spatial_list = batch.get("spatial", [])
+                body_list = batch.get("body_move", []) 
+                rhythm_list = batch.get("rhythm", [])
+                re_dict = self.database(text_list, spatial_list, body_list, rhythm_list, motion_lens, clip_model, x_start.device)
         
         # Sample random timesteps for training
         t = torch.randint(0, self.flow.num_timesteps, (B,), device=x_start.device)
@@ -338,7 +341,10 @@ class FlowMatching_Duet(nn.Module):
             motion_lens = batch["motion_lens"]
             clip_model = batch.get("clip_model", None)
             if clip_model is not None and text_list:
-                re_dict = self.database(text_list, motion_lens, clip_model, cond.device)
+                spatial_list = batch.get("spatial", [])
+                body_list = batch.get("body_move", []) 
+                rhythm_list = batch.get("rhythm", [])
+                re_dict = self.database(text_list, spatial_list, body_list, rhythm_list, motion_lens, clip_model, cond.device)
         
         # Create model wrapper class that properly handles tensor replication
         class CFGModelWrapper:
@@ -547,7 +553,7 @@ class RetrievalDatabase_Duet(nn.Module):
             text_features = clip_model.encode_text(text_tokens)
         return text_features
     
-    def retrieve(self, caption, length, clip_model, device, idx=None):
+    def retrieve(self, caption, spatial_text, body_text, rhythm_text, length, clip_model, device, idx=None):
         """
         Retrieve similar motions based on semantic and kinematic similarity
         This is where the cosine similarity calculation happens!
@@ -557,20 +563,25 @@ class RetrievalDatabase_Duet(nn.Module):
         if cache_key in self.results_cache:
             return self.results_cache[cache_key]
         
-        # Extract text feature for the current caption
-        text_feature = self.extract_text_feature(caption, clip_model, device)
-        
         # Calculate kinematic similarity (motion length)
         rel_length = torch.LongTensor(self.motion_lengths).to(device)
         rel_length = torch.abs(rel_length - length) / torch.clamp(rel_length, min=length)
         kinematic_score = torch.exp(-rel_length * self.kinematic_coef)
         
-        # Calculate semantic similarity using cosine similarity
-        semantic_score = F.cosine_similarity(
-            self.text_features.to(device), 
-            text_feature,
-            dim=1
-        )
+        # Extract features for all text types
+        text_feature = self.extract_text_feature(caption, clip_model, device)
+        spatial_feature = self.extract_text_feature(spatial_text, clip_model, device)
+        body_feature = self.extract_text_feature(body_text, clip_model, device)
+        rhythm_feature = self.extract_text_feature(rhythm_text, clip_model, device)
+
+        # Calculate semantic similarity for each text type
+        text_sim = F.cosine_similarity(self.text_features.to(device), text_feature, dim=1)
+        spatial_sim = F.cosine_similarity(self.spatial_features.to(device), spatial_feature, dim=1)
+        body_sim = F.cosine_similarity(self.body_features.to(device), body_feature, dim=1)
+        rhythm_sim = F.cosine_similarity(self.rhythm_features.to(device), rhythm_feature, dim=1)
+
+        # Combine similarities (you can adjust weights as needed)
+        semantic_score = (text_sim + spatial_sim + body_sim + rhythm_sim) / 4.0
         
         # Combine semantic and kinematic scores
         combined_score = semantic_score * kinematic_score
@@ -703,7 +714,7 @@ class RetrievalDatabase_Duet(nn.Module):
         
         return re_music
     
-    def forward(self, captions, lengths, clip_model, device, idx=None):
+    def forward(self, captions, spatial_texts, body_texts, rhythm_texts, lengths, clip_model, device, idx=None):
         """
         Main forward pass that performs retrieval and feature processing
         """
@@ -713,7 +724,7 @@ class RetrievalDatabase_Duet(nn.Module):
         # Retrieve for each caption in the batch
         for b_idx in range(B):
             length = int(lengths[b_idx])
-            batch_indices = self.retrieve(captions[b_idx], length, clip_model, device)
+            batch_indices = self.retrieve(captions[b_idx], spatial_texts[b_idx], body_texts[b_idx], rhythm_texts[b_idx], length, clip_model, device)
             all_indices.extend(batch_indices)
         
         all_indices = np.array(all_indices)

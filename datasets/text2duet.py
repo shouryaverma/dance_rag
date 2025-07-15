@@ -111,7 +111,7 @@ def process_motion_np(motion, rotations, feet_thre = 0.001, n_joints =  22):
 
 class Text2Duet(Dataset):
     def __init__(self, cfg, music_root, motion_root, text_root, split='train', fps = 30, dtype='pos3d', music_dance_rate=1):
-        self.dances = {'rotmatl':[], 'rotmatf':[], 'pos3dl':[], 'pos3df':[], 'music':[], 'text': [], 'music_wav_path': []}
+        self.dances = {'rotmatl':[], 'rotmatf':[], 'pos3dl':[], 'pos3df':[], 'music':[], 'text': [], 'spatial': [], 'body_move': [], 'rhythm': [], 'music_wav_path': []}
         dtypes = ['rotmat', 'pos3d']
         self.cfg = cfg
         self.dtype = dtype
@@ -148,7 +148,13 @@ class Text2Duet(Dataset):
             
             #load the txt file from text_path
             text_path = text_files[take]
+            spatial_path = text_path.replace('processed', 'spatial')
+            body_path = text_path.replace('processed', 'body_move')
+            rhythm_path = text_path.replace('processed', 'rhythm')
             text = open(text_path, "r").readlines()[0] # first line
+            spatial = open(spatial_path, "r").readlines()[0] # first line
+            body_move = open(body_path, "r").readlines()[0] # first line
+            rhythm = open(rhythm_path, "r").readlines()[0] # first line
             # original music sequence
             music_wav_path = self.music_seqs[take]
             self.dances['music_wav_path'].append(music_wav_path)
@@ -183,10 +189,14 @@ class Text2Duet(Dataset):
                 if dtype_folder != 'rotmat':
                     self.dances['music'].append(np_music[:seq_len])
                     self.dances['text'].append(text)
+                    self.dances['spatial'].append(spatial)
+                    self.dances['body_move'].append(body_move)
+                    self.dances['rhythm'].append(rhythm)
                     self.names.append(take)
+
         # NOTE: now we have the primary data
         print('dataset first-round loading done')
-        self.dances_processed = {'motionl':[], 'motionf':[], 'music':[], 'text': [], 'length':[], 'music_wav_path': []}
+        self.dances_processed = {'motionl':[], 'motionf':[], 'music':[], 'text': [], 'spatial': [], 'body_move': [], 'rhythm': [], 'length':[], 'music_wav_path': []}
         for index in tqdm(range(len(self.dances['text']))):
             music_wav_path = self.dances['music_wav_path'][index]
             music = self.dances['music'][index]
@@ -209,6 +219,9 @@ class Text2Duet(Dataset):
             self.dances_processed['motionf'].append(motion2)
             self.dances_processed['music'].append(music)
             self.dances_processed['text'].append(text)
+            self.dances_processed['spatial'].append(spatial)
+            self.dances_processed['body_move'].append(body_move)
+            self.dances_processed['rhythm'].append(rhythm)
             self.dances_processed['length'].append(len(motion1))
             self.dances_processed['music_wav_path'].append(music_wav_path)
             
@@ -259,6 +272,9 @@ class Text2Duet(Dataset):
         motion2 = self.dances_processed['motionf'][index]
         music = self.dances_processed['music'][index]
         text = self.dances_processed['text'][index]
+        spatial = self.dances_processed['spatial'][index]
+        body_move = self.dances_processed['body_move'][index]
+        rhythm = self.dances_processed['rhythm'][index]
         length = self.dances_processed['length'][index]
         
         # Padding motions to max_len
@@ -274,6 +290,9 @@ class Text2Duet(Dataset):
             'motion2': motion2,
             'music': music,
             'text': text,
+            'spatial': spatial,
+            'body_move': body_move,
+            'rhythm': rhythm,
             'length': length,
             'fname':self.names[index],
             'music_wav_path': self.dances_processed['music_wav_path'][index]
@@ -312,11 +331,18 @@ if __name__ == '__main__':
     motion_2 = item_dict['motion2']
     music = item_dict['music']
     text = item_dict['text']
+    spatial = item_dict['spatial']
+    body_move = item_dict['body_move']
+    rhythm = item_dict['rhythm']
+    print(text)
+    print(spatial)
+    print(body_move)
+    print(rhythm)
     print(length)
     print(motion_1.shape)
     print(music.shape)
     result_path = "results/debug_ori.mp4"
-    plot_t2m([motion_1, motion_2],
-                      result_path,
-                      text)
+    # plot_t2m([motion_1, motion_2],
+    #                   result_path,
+    #                   text)
     # TODO: visualization code
