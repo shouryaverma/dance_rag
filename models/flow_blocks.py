@@ -44,14 +44,15 @@ class MultiScaleVanillaDuetBlock(nn.Module):
         self.dancer_a_norm3 = nn.LayerNorm(latent_dim)
         self.dancer_b_norm3 = nn.LayerNorm(latent_dim)
         
-        # Feedforward networks for dancers
-        self.dancer_a_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
-        self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
-
+        # Retrieval cross-attention (moved before FFN)
         self.retrieval_to_a_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.retrieval_to_b_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
+        
+        # Feedforward networks for dancers (moved to end)
+        self.dancer_a_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.dancer_a_norm5 = nn.LayerNorm(latent_dim)
         self.dancer_b_norm5 = nn.LayerNorm(latent_dim)
 
@@ -104,26 +105,8 @@ class MultiScaleVanillaDuetBlock(nn.Module):
         x_interact = x_music + self.b_to_a_attn(x_norm3, y_music, emb, key_padding_mask)
         y_interact = y_music + self.a_to_b_attn(y_norm3, x_music, emb, key_padding_mask)
         
-        # Apply feedforward networks to dancers
-        x_norm4 = self.dancer_a_norm4(x_interact)
-        y_norm4 = self.dancer_b_norm4(y_interact)
-        x_final = x_interact + self.dancer_a_ffn(x_norm4, emb)
-        y_final = y_interact + self.dancer_b_ffn(y_norm4, emb)
-
-        # Apply retrieval conditioning to dancers
+        # Apply retrieval conditioning to dancers (MOVED BEFORE FFN)
         if re_dict is not None:
-            # Concatenate retrieval motion and text features
-            # re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
-            # re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
-            # re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
-            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
-
-            # # Create combined mask
-            # re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
-            # re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
-            # re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
-            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
-            
             # Concatenate retrieval motion and all text features
             re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])
             re_spatial = re_dict['re_spatial'].reshape(x.shape[0], -1, x.shape[-1])
@@ -143,10 +126,18 @@ class MultiScaleVanillaDuetBlock(nn.Module):
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning to both dancers
-            x_norm5 = self.dancer_a_norm5(x_final)
-            y_norm5 = self.dancer_b_norm5(y_final)
-            x_final = x_final + self.retrieval_to_a_attn(x_norm5, re_features, emb, re_key_padding_mask)
-            y_final = y_final + self.retrieval_to_b_attn(y_norm5, re_features, emb, re_key_padding_mask)
+            x_norm4 = self.dancer_a_norm4(x_interact)
+            y_norm4 = self.dancer_b_norm4(y_interact)
+            x_retrieval = x_interact + self.retrieval_to_a_attn(x_norm4, re_features, emb, re_key_padding_mask)
+            y_retrieval = y_interact + self.retrieval_to_b_attn(y_norm4, re_features, emb, re_key_padding_mask)
+        else:
+            x_retrieval, y_retrieval = x_interact, y_interact
+
+        # Apply feedforward networks to dancers (MOVED TO END)
+        x_norm5 = self.dancer_a_norm5(x_retrieval)
+        y_norm5 = self.dancer_b_norm5(y_retrieval)
+        x_final = x_retrieval + self.dancer_a_ffn(x_norm5, emb)
+        y_final = y_retrieval + self.dancer_b_ffn(y_norm5, emb)
 
         return x_final, y_final, music
     
@@ -168,9 +159,6 @@ class VanillaDuetBlock(nn.Module):
             **kwargs
         )
         
-    # def forward(self, x, y, music, emb=None, key_padding_mask=None):
-    #     return self.custom_block(x, y, music, emb, key_padding_mask)
-
     def forward(self, x, y, music, emb=None, key_padding_mask=None, re_dict=None):
         return self.custom_block(x, y, music, emb, key_padding_mask, re_dict)
 
@@ -217,15 +205,15 @@ class MultiScaleFlashDuetBlock(nn.Module):
         self.dancer_a_norm3 = nn.LayerNorm(latent_dim)
         self.dancer_b_norm3 = nn.LayerNorm(latent_dim)
        
-        # Feedforward networks for dancers
-        self.dancer_a_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
-        self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
-
-        # Retrieval cross-attention: retrieved features → dancers
+        # Retrieval cross-attention: retrieved features → dancers (moved before FFN)
         self.retrieval_to_a_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.retrieval_to_b_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.dancer_a_norm4 = nn.LayerNorm(latent_dim)
+        self.dancer_b_norm4 = nn.LayerNorm(latent_dim)
+        
+        # Feedforward networks for dancers (moved to end)
+        self.dancer_a_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
+        self.dancer_b_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.dancer_a_norm5 = nn.LayerNorm(latent_dim)
         self.dancer_b_norm5 = nn.LayerNorm(latent_dim)
 
@@ -278,26 +266,8 @@ class MultiScaleFlashDuetBlock(nn.Module):
         x_interact = x_music + self.b_to_a_attn(x_norm3, y_music, emb, key_padding_mask)
         y_interact = y_music + self.a_to_b_attn(y_norm3, x_music, emb, key_padding_mask)
        
-        # Apply feedforward networks to dancers
-        x_norm4 = self.dancer_a_norm4(x_interact)
-        y_norm4 = self.dancer_b_norm4(y_interact)
-        x_final = x_interact + self.dancer_a_ffn(x_norm4, emb)
-        y_final = y_interact + self.dancer_b_ffn(y_norm4, emb)
-
-        # Apply retrieval conditioning to dancers
+        # Apply retrieval conditioning to dancers (MOVED BEFORE FFN)
         if re_dict is not None:
-            # Concatenate retrieval motion and text features
-            # re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])  # Use actual latent dim
-            # re_text = re_dict['re_text'].reshape(x.shape[0], -1, x.shape[-1])      # Use actual latent dim
-            # re_music = re_dict['re_music'].reshape(x.shape[0], -1, x.shape[-1])    # Use actual latent dim
-            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
-
-            # # Create combined mask
-            # re_motion_mask = re_dict['re_mask'].reshape(x.shape[0], -1)
-            # re_text_mask = torch.ones(re_text.shape[:2], device=x.device)
-            # re_music_mask = torch.ones(re_music.shape[:2], device=x.device)
-            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
-
             # Concatenate retrieval motion and all text features
             re_motion = re_dict['re_motion'].reshape(x.shape[0], -1, x.shape[-1])
             re_spatial = re_dict['re_spatial'].reshape(x.shape[0], -1, x.shape[-1])
@@ -317,10 +287,18 @@ class MultiScaleFlashDuetBlock(nn.Module):
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning to both dancers
-            x_norm5 = self.dancer_a_norm5(x_final)
-            y_norm5 = self.dancer_b_norm5(y_final)
-            x_final = x_final + self.retrieval_to_a_attn(x_norm5, re_features, emb, re_key_padding_mask)
-            y_final = y_final + self.retrieval_to_b_attn(y_norm5, re_features, emb, re_key_padding_mask)
+            x_norm4 = self.dancer_a_norm4(x_interact)
+            y_norm4 = self.dancer_b_norm4(y_interact)
+            x_retrieval = x_interact + self.retrieval_to_a_attn(x_norm4, re_features, emb, re_key_padding_mask)
+            y_retrieval = y_interact + self.retrieval_to_b_attn(y_norm4, re_features, emb, re_key_padding_mask)
+        else:
+            x_retrieval, y_retrieval = x_interact, y_interact
+            
+        # Apply feedforward networks to dancers (MOVED TO END)
+        x_norm5 = self.dancer_a_norm5(x_retrieval)
+        y_norm5 = self.dancer_b_norm5(y_retrieval)
+        x_final = x_retrieval + self.dancer_a_ffn(x_norm5, emb)
+        y_final = y_retrieval + self.dancer_b_ffn(y_norm5, emb)
        
         return x_final, y_final, music
 
@@ -343,9 +321,6 @@ class FlashDuetBlock(nn.Module):
             **kwargs
         )
        
-    # def forward(self, x, y, music, emb=None, key_padding_mask=None):
-    #     return self.custom_block(x, y, music, emb, key_padding_mask)
-
     def forward(self, x, y, music, emb=None, key_padding_mask=None, re_dict=None):
         return self.custom_block(x, y, music, emb, key_padding_mask, re_dict)
 
@@ -386,13 +361,13 @@ class MultiScaleVanillaReactBlock(nn.Module):
         self.lead_to_follower_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.follower_norm3 = nn.LayerNorm(latent_dim)
        
-        # Feedforward network for follower
-        self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        self.follower_norm4 = nn.LayerNorm(latent_dim)
-
-        # Retrieval cross-attention for follower
+        # Retrieval cross-attention for follower (moved before FFN)
         self.retrieval_proj = nn.Linear(484, 512)
         self.retrieval_to_follower_attn = VanillaCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.follower_norm4 = nn.LayerNorm(latent_dim)
+        
+        # Feedforward network for follower (moved to end)
+        self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.follower_norm5 = nn.LayerNorm(latent_dim)
        
     def forward(self, lead, follower, music, emb=None, key_padding_mask=None, re_dict=None):
@@ -426,49 +401,45 @@ class MultiScaleVanillaReactBlock(nn.Module):
         follower_norm3 = self.follower_norm3(follower_music)
         follower_react = follower_music + self.lead_to_follower_attn(follower_norm3, lead, emb, key_padding_mask)
        
-        # Apply feedforward network to follower
-        follower_norm4 = self.follower_norm4(follower_react)
-        follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
-
-        # Apply retrieval conditioning to follower
+        # Apply retrieval conditioning to follower (MOVED BEFORE FFN)
         if re_dict is not None:
             # Concatenate ALL retrieval features: motion + text + music
             re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
-            # re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_spatial = re_dict['re_spatial'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_body = re_dict['re_body'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_rhythm = re_dict['re_rhythm'].reshape(follower.shape[0], -1, follower.shape[-1])
 
-        if re_motion.shape[-1] != follower.shape[-1]:
-            # Add a projection layer in __init__: self.retrieval_proj = nn.Linear(484, 512)
-            re_music = self.retrieval_proj(re_music)
-            re_motion = self.retrieval_proj(re_motion)
-            # re_text = self.retrieval_proj(re_text)
-            re_spatial = self.retrieval_proj(re_spatial)
-            re_body = self.retrieval_proj(re_body)
-            re_rhythm = self.retrieval_proj(re_rhythm)
+            if re_motion.shape[-1] != follower.shape[-1]:
+                # Project retrieval features to correct dimension
+                re_music = self.retrieval_proj(re_music)
+                re_motion = self.retrieval_proj(re_motion)
+                re_spatial = self.retrieval_proj(re_spatial)
+                re_body = self.retrieval_proj(re_body)
+                re_rhythm = self.retrieval_proj(re_rhythm)
 
             # Combine all retrieval modalities
-            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
             re_features = torch.cat([re_motion, re_spatial, re_body, re_rhythm, re_music], dim=1)
 
             # Create combined mask for all modalities
             re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
             re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
-            # re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
-
             re_spatial_mask = torch.ones(re_spatial.shape[:2], device=follower.device)
             re_body_mask = torch.ones(re_body.shape[:2], device=follower.device)
             re_rhythm_mask = torch.ones(re_rhythm.shape[:2], device=follower.device)           
             
-            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
             re_combined_mask = torch.cat([re_motion_mask, re_spatial_mask, re_body_mask, re_rhythm_mask, re_music_mask], dim=1)
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
-            # Apply retrieval conditioning ONLY to follower (lead dancer unchanged)
-            follower_norm5 = self.follower_norm5(follower_final)
-            follower_final = follower_final + self.retrieval_to_follower_attn(follower_norm5, re_features, emb, re_key_padding_mask)
+            # Apply retrieval conditioning ONLY to follower
+            follower_norm4 = self.follower_norm4(follower_react)
+            follower_retrieval = follower_react + self.retrieval_to_follower_attn(follower_norm4, re_features, emb, re_key_padding_mask)
+        else:
+            follower_retrieval = follower_react
+
+        # Apply feedforward network to follower (MOVED TO END)
+        follower_norm5 = self.follower_norm5(follower_retrieval)
+        follower_final = follower_retrieval + self.follower_ffn(follower_norm5, emb)
        
         # Return the updated follower state, keeping lead and music unchanged
         return lead, follower_final, music
@@ -528,17 +499,17 @@ class MultiScaleFlashReactBlock(nn.Module):
         self.music_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.follower_norm2 = nn.LayerNorm(latent_dim)
        
-        # Gated cross-attention: lead → follower with Flash Attention
+        # Cross-attention: lead → follower with Flash Attention
         self.lead_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
         self.follower_norm3 = nn.LayerNorm(latent_dim)
        
-        # Feedforward network for follower
-        self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
-        self.follower_norm4 = nn.LayerNorm(latent_dim)
-
-        # Retrieval cross-attention for follower
+        # Retrieval cross-attention for follower (moved before FFN)
         self.retrieval_proj = nn.Linear(484, 512)
         self.retrieval_to_follower_attn = FlashCrossAttention(latent_dim, latent_dim, num_heads, dropout, latent_dim)
+        self.follower_norm4 = nn.LayerNorm(latent_dim)
+        
+        # Feedforward network for follower (moved to end)
+        self.follower_ffn = FFN(latent_dim, ff_size, dropout, latent_dim)
         self.follower_norm5 = nn.LayerNorm(latent_dim)
        
     def forward(self, lead, follower, music, emb=None, key_padding_mask=None, re_dict=None):
@@ -568,55 +539,50 @@ class MultiScaleFlashReactBlock(nn.Module):
         follower_norm2 = self.follower_norm2(follower_self)
         follower_music = follower_self + self.music_to_follower_attn(follower_norm2, music, emb, key_padding_mask)
        
-        # Lead dancer influences follower with gated attention
+        # Lead dancer influences follower
         follower_norm3 = self.follower_norm3(follower_music)
         follower_react = follower_music + self.lead_to_follower_attn(follower_norm3, lead, emb, key_padding_mask)
        
-        # Apply feedforward network to follower
-        follower_norm4 = self.follower_norm4(follower_react)
-        follower_final = follower_react + self.follower_ffn(follower_norm4, emb)
-
+        # Apply retrieval conditioning to follower (MOVED BEFORE FFN)
         if re_dict is not None:
             # Concatenate ALL retrieval features: motion + text + music
             re_music = re_dict['re_music'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_motion = re_dict['re_motion'].reshape(follower.shape[0], -1, follower.shape[-1])
-
-            # re_text = re_dict['re_text'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_spatial = re_dict['re_spatial'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_body = re_dict['re_body'].reshape(follower.shape[0], -1, follower.shape[-1])
             re_rhythm = re_dict['re_rhythm'].reshape(follower.shape[0], -1, follower.shape[-1])
 
-        if re_motion.shape[-1] != follower.shape[-1]:
-            # Add a projection layer in __init__: self.retrieval_proj = nn.Linear(484, 512)
-            re_music = self.retrieval_proj(re_music)
-            re_motion = self.retrieval_proj(re_motion)
-
-            # re_text = self.retrieval_proj(re_text)
-            re_spatial = self.retrieval_proj(re_spatial)
-            re_body = self.retrieval_proj(re_body)
-            re_rhythm = self.retrieval_proj(re_rhythm)
+            if re_motion.shape[-1] != follower.shape[-1]:
+                # Project retrieval features to correct dimension
+                re_music = self.retrieval_proj(re_music)
+                re_motion = self.retrieval_proj(re_motion)
+                re_spatial = self.retrieval_proj(re_spatial)
+                re_body = self.retrieval_proj(re_body)
+                re_rhythm = self.retrieval_proj(re_rhythm)
             
             # Combine all retrieval modalities
-            # re_features = torch.cat([re_motion, re_text, re_music], dim=1)
             re_features = torch.cat([re_motion, re_spatial, re_body, re_rhythm, re_music], dim=1)
 
             # Create combined mask for all modalities
             re_music_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
             re_motion_mask = re_dict['re_mask'].reshape(follower.shape[0], -1)
-
-            # re_text_mask = torch.ones(re_text.shape[:2], device=follower.device)
             re_spatial_mask = torch.ones(re_spatial.shape[:2], device=follower.device)
             re_body_mask = torch.ones(re_body.shape[:2], device=follower.device)
             re_rhythm_mask = torch.ones(re_rhythm.shape[:2], device=follower.device)   
             
-            # re_combined_mask = torch.cat([re_motion_mask, re_text_mask, re_music_mask], dim=1)
             re_combined_mask = torch.cat([re_motion_mask, re_spatial_mask, re_body_mask, re_rhythm_mask, re_music_mask], dim=1)
             re_key_padding_mask = ~(re_combined_mask > 0.5)
 
             # Apply retrieval conditioning ONLY to follower
-            follower_norm5 = self.follower_norm5(follower_final)
-            follower_final = follower_final + self.retrieval_to_follower_attn(follower_norm5, re_features, emb, re_key_padding_mask)
+            follower_norm4 = self.follower_norm4(follower_react)
+            follower_retrieval = follower_react + self.retrieval_to_follower_attn(follower_norm4, re_features, emb, re_key_padding_mask)
+        else:
+            follower_retrieval = follower_react
  
+        # Apply feedforward network to follower (MOVED TO END)
+        follower_norm5 = self.follower_norm5(follower_retrieval)
+        follower_final = follower_retrieval + self.follower_ffn(follower_norm5, emb)
+        
         # Return the updated follower state, keeping lead and music
         return lead, follower_final, music
 
