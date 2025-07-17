@@ -518,26 +518,13 @@ class RetrievalDatabase_Duet(nn.Module):
         print(f"Loading retrieval database from: {retrieval_file}")
         data = np.load(retrieval_file, allow_pickle=True)
         
-        # Debug info
-        print("NPZ file contents:")
-        for key in data.keys():
-            if key in ['text_features', 'clip_seq_features', 'motion_lengths']:
-                print(f"  {key}: {data[key].shape} ({data[key].dtype})")
-            else:
-                print(f"  {key}: {len(data[key])} items")
-        
-        # Load text features - should be (N, 768) float32 array
+        # Load text features for retrieval
         self.text_features = torch.from_numpy(data['text_features'])
         self.spatial_features = torch.from_numpy(data['spatial_features']) 
         self.body_features = torch.from_numpy(data['body_features'])
         self.rhythm_features = torch.from_numpy(data['rhythm_features'])
 
-        print(f"Loaded text features: {self.text_features.shape}")
-        print(f"Loaded spatial features: {self.spatial_features.shape}")
-        print(f"Loaded body features: {self.body_features.shape}")
-        print(f"Loaded rhythm features: {self.rhythm_features.shape}")
-        
-        # Load other data
+        # Load data
         self.text_strings = data['text_strings']
         self.spatial_texts = data['spatial_texts']
         self.body_texts = data['body_texts'] 
@@ -547,54 +534,37 @@ class RetrievalDatabase_Duet(nn.Module):
         self.follow_motions = data['follow_motions']
         self.motion_lengths = data['motion_lengths']
         self.music_features = data['music_features']
-
-        self.clip_seq_features = data['clip_seq_features']
-        self.spatial_clip_seq_features = data['spatial_clip_seq_features']
-        self.body_clip_seq_features = data['body_clip_seq_features']
-        self.rhythm_clip_seq_features = data['rhythm_clip_seq_features']
-
-        # DEBUG: Check actual motion dimensions
+        
+        # Calculate actual motion dimension
         sample_lead = self.lead_motions[0]
         sample_follow = self.follow_motions[0]
-        print(f"Sample lead motion shape: {sample_lead.shape}")
-        print(f"Sample follow motion shape: {sample_follow.shape}")
-        
-        # Calculate actual motion input dimension
         combined_sample = np.concatenate([sample_lead, sample_follow], axis=-1)
         actual_motion_dim = combined_sample.shape[-1]
-        print(f"Combined motion dimension: {actual_motion_dim}")
         
         print(f"Database loaded successfully:")
         print(f"  - Text features: {self.text_features.shape}")
+        print(f"  - Spatial features: {self.spatial_features.shape}")
+        print(f"  - Body features: {self.body_features.shape}")
+        print(f"  - Rhythm features: {self.rhythm_features.shape}")
         print(f"  - Lead motions: {len(self.lead_motions)}")
         print(f"  - Follow motions: {len(self.follow_motions)}")
         print(f"  - Motion lengths: {len(self.motion_lengths)}")
-        print(f"  - CLIP seq features: {self.clip_seq_features.shape}")
+        print(f"  - Music features: {len(self.music_features)}")
         print(f"  - Actual motion input dim: {actual_motion_dim}")
         
-        # Motion processing components - use actual dimension
+        # Motion processing components
         self.motion_proj = nn.Linear(actual_motion_dim, self.latent_dim)
         self.motion_pos_embedding = nn.Parameter(torch.randn(max_seq_len, self.latent_dim))
         
-        # Text processing - matches CLIP sequence feature dimension
-        self.text_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(768, 8, 2048, 0.1, "gelu", batch_first=True), 
-            num_layers=2
-        )
-
-        # Add text projection to match latent_dim
-        self.text_proj = nn.Linear(768, self.latent_dim)
-
+        # Music feature dimension for similarity computation
         sample_music = self.music_features[0]
-        actual_music_dim = sample_music.shape[-1]
-        print(f"Sample music feature shape: {sample_music.shape}")
-        print(f"Actual music feature dimension: {actual_music_dim}")
-
-        self.music_proj = nn.Linear(actual_music_dim, self.latent_dim)
-        print(f"Music projection layer created with input dim {actual_music_dim} and output dim {self.latent_dim}")
+        self.music_dim = sample_music.shape[-1]
         
-        # Cache for retrieval results
-        self.results_cache = {}
+        # Caches for each modality
+        self.spatial_cache = {}
+        self.body_cache = {}
+        self.rhythm_cache = {}
+        self.music_cache = {}
     
     def extract_text_feature(self, text, clip_model, device):
         """Extract CLIP text features for a single text"""
@@ -603,53 +573,101 @@ class RetrievalDatabase_Duet(nn.Module):
             text_features = clip_model.encode_text(text_tokens)
         return text_features
     
-    def retrieve(self, caption, spatial_text, body_text, rhythm_text, length, clip_model, device, idx=None):
+    def extract_music_feature(self, music, device):
+        """Extract music feature representation for similarity matching"""
+        # Average pool music features across time dimension for similarity computation
+        music_feat = torch.from_numpy(music).to(device)
+        # Global average pooling across time
+        music_global = torch.mean(music_feat, dim=0, keepdim=True)  # Shape: (1, music_dim)
+        return music_global
+    
+    def retrieve_by_single_text(self, text, text_type, length, clip_model, device):
         """
-        Retrieve similar motions based on semantic and kinematic similarity
-        This is where the cosine similarity calculation happens!
+        Retrieve similar motions based on a single text type
         """
+        # Select appropriate cache and features based on text type
+        if text_type == "spatial":
+            cache = self.spatial_cache
+            db_features = self.spatial_features
+        elif text_type == "body":
+            cache = self.body_cache
+            db_features = self.body_features
+        elif text_type == "rhythm":
+            cache = self.rhythm_cache
+            db_features = self.rhythm_features
+        else:
+            raise ValueError(f"Unknown text type: {text_type}")
+        
         # Check cache first
-        cache_key = f"{caption}_{length}"
-        if cache_key in self.results_cache:
-            return self.results_cache[cache_key]
+        cache_key = f"{text}_{length}"
+        if cache_key in cache:
+            return cache[cache_key]
         
         # Calculate kinematic similarity (motion length)
         rel_length = torch.LongTensor(self.motion_lengths).to(device)
         rel_length = torch.abs(rel_length - length) / torch.clamp(rel_length, min=length)
         kinematic_score = torch.exp(-rel_length * self.kinematic_coef)
         
-        # Extract features for all text types
-        text_feature = self.extract_text_feature(caption, clip_model, device)
-        spatial_feature = self.extract_text_feature(spatial_text, clip_model, device)
-        body_feature = self.extract_text_feature(body_text, clip_model, device)
-        rhythm_feature = self.extract_text_feature(rhythm_text, clip_model, device)
+        # Extract text feature
+        text_feature = self.extract_text_feature(text, clip_model, device)
 
-        # Calculate semantic similarity for each text type
-        text_sim = F.cosine_similarity(self.text_features.to(device), text_feature, dim=1)
-        spatial_sim = F.cosine_similarity(self.spatial_features.to(device), spatial_feature, dim=1)
-        body_sim = F.cosine_similarity(self.body_features.to(device), body_feature, dim=1)
-        rhythm_sim = F.cosine_similarity(self.rhythm_features.to(device), rhythm_feature, dim=1)
-
-        # Combine similarities (you can adjust weights as needed)
-        semantic_score = (text_sim + spatial_sim + body_sim + rhythm_sim) / 4.0
+        # Calculate semantic similarity
+        semantic_score = F.cosine_similarity(db_features.to(device), text_feature, dim=1)
         
         # Combine semantic and kinematic scores
         combined_score = semantic_score * kinematic_score
         
-        # Get top-k indices
+        # Get top indices
         top_indices = torch.argsort(combined_score, descending=True)
         
-        # Select num_retrieval samples from top-k
+        # Select num_retrieval samples from top
         selected_indices = []
-        count = 0
-        for idx_val in top_indices:
-            if count >= self.num_retrieval:
-                break
-            selected_indices.append(idx_val.item())
-            count += 1
+        for i in range(min(self.num_retrieval, len(top_indices))):
+            selected_indices.append(top_indices[i].item())
         
         # Cache results
-        self.results_cache[cache_key] = selected_indices
+        cache[cache_key] = selected_indices
+        return selected_indices
+    
+    def retrieve_by_music(self, music, length, device):
+        """
+        Retrieve similar motions based on music similarity
+        """
+        # Check cache first
+        cache_key = f"music_{music.shape}_{length}"
+        if cache_key in self.music_cache:
+            return self.music_cache[cache_key]
+        
+        # Calculate kinematic similarity
+        rel_length = torch.LongTensor(self.motion_lengths).to(device)
+        rel_length = torch.abs(rel_length - length) / torch.clamp(rel_length, min=length)
+        kinematic_score = torch.exp(-rel_length * self.kinematic_coef)
+        
+        # Extract global music feature from input
+        input_music_global = torch.mean(music, dim=0, keepdim=True)  # Shape: (1, music_dim)
+        
+        # Calculate music similarity with all database entries
+        music_similarities = []
+        for i in range(len(self.music_features)):
+            db_music_feat = self.extract_music_feature(self.music_features[i], device)
+            sim = F.cosine_similarity(input_music_global, db_music_feat, dim=1)
+            music_similarities.append(sim.item())
+        
+        music_similarities = torch.tensor(music_similarities).to(device)
+        
+        # Combine music and kinematic scores
+        combined_score = music_similarities * kinematic_score
+        
+        # Get top indices
+        top_indices = torch.argsort(combined_score, descending=True)
+        
+        # Select num_retrieval samples
+        selected_indices = []
+        for i in range(min(self.num_retrieval, len(top_indices))):
+            selected_indices.append(top_indices[i].item())
+        
+        # Cache results
+        self.music_cache[cache_key] = selected_indices
         return selected_indices
     
     def process_retrieved_motions(self, indices, device):
@@ -668,7 +686,7 @@ class RetrievalDatabase_Duet(nn.Module):
         
         # Find the maximum length for padding
         max_length = max(motion_lengths)
-        max_length = min(max_length, self.motion_pos_embedding.shape[0])  # Don't exceed pos embedding size
+        max_length = min(max_length, self.motion_pos_embedding.shape[0])
         
         # Pad all motions to the same length
         padded_motions = []
@@ -684,7 +702,7 @@ class RetrievalDatabase_Duet(nn.Module):
                 padded_motion = np.concatenate([motion, padding], axis=0)
             padded_motions.append(padded_motion)
         
-        # Now stack the padded motions
+        # Stack the padded motions
         retrieved_motions = torch.Tensor(np.stack(padded_motions)).to(device)
         
         # Project to latent space and add positional embeddings
@@ -694,131 +712,114 @@ class RetrievalDatabase_Duet(nn.Module):
         # Apply stride
         re_motion = re_motion[:, ::self.stride, :].contiguous()
         
-        return re_motion
-
-    def process_retrieved_texts(self, indices, device):
-        """Process retrieved text features through text encoder"""
-        # Get CLIP sequence features for all three text types
-        retrieved_spatial_features = []
-        retrieved_body_features = []
-        retrieved_rhythm_features = []
-        
-        for idx in indices:
-            spatial_feat = self.spatial_clip_seq_features[idx]  # Shape: (77, 768)
-            body_feat = self.body_clip_seq_features[idx]      # Shape: (77, 768)  
-            rhythm_feat = self.rhythm_clip_seq_features[idx]   # Shape: (77, 768)
-            
-            retrieved_spatial_features.append(spatial_feat)
-            retrieved_body_features.append(body_feat)
-            retrieved_rhythm_features.append(rhythm_feat)
-        
-        # Stack each type into (num_retrieval, 77, 768)
-        retrieved_spatial = torch.Tensor(np.stack(retrieved_spatial_features)).to(device)
-        retrieved_body = torch.Tensor(np.stack(retrieved_body_features)).to(device)
-        retrieved_rhythm = torch.Tensor(np.stack(retrieved_rhythm_features)).to(device)
-        
-        # Process through text encoder
-        re_spatial = self.text_encoder(retrieved_spatial)[:, -1:, :].contiguous()
-        re_body = self.text_encoder(retrieved_body)[:, -1:, :].contiguous()  
-        re_rhythm = self.text_encoder(retrieved_rhythm)[:, -1:, :].contiguous()
-        
-        # Project to latent dimension
-        re_spatial = self.text_proj(re_spatial)  # Shape: (N, 1, 512)
-        re_body = self.text_proj(re_body)        # Shape: (N, 1, 512)
-        re_rhythm = self.text_proj(re_rhythm)    # Shape: (N, 1, 512)
-        
-        return re_spatial, re_body, re_rhythm
+        return re_motion, motion_lengths
     
-    def process_retrieved_music(self, indices, device):
-        """Process retrieved music features"""
-        retrieved_music = []
-        
-        for idx in indices:
-            music_feat = self.music_features[idx]  # Should be (T, music_dim)
-            retrieved_music.append(music_feat)
-        
-        # Find max length and pad
-        max_length = max(len(music) for music in retrieved_music)
-        max_length = min(max_length, self.motion_pos_embedding.shape[0])
-        
-        # Pad all music features to same length
-        padded_music = []
-        for music in retrieved_music:
-            current_length = len(music)
-            if current_length >= max_length:
-                padded_music.append(music[:max_length])
-            else:
-                padding_needed = max_length - current_length
-                padding = np.zeros((padding_needed, music.shape[1]), dtype=music.dtype)
-                padded_music.append(np.concatenate([music, padding], axis=0))
-        
-        # Stack and convert to tensor
-        retrieved_music = torch.Tensor(np.stack(padded_music)).to(device)
-        
-        # Project to latent space (add this projection layer to __init__)
-        # self.music_proj = nn.Linear(music_dim, self.latent_dim)
-        re_music = self.music_proj(retrieved_music) + self.motion_pos_embedding[:max_length].unsqueeze(0)
-        
-        # Apply stride
-        re_music = re_music[:, ::self.stride, :].contiguous()
-        
-        return re_music
-    
-    def forward(self, captions, spatial_texts, body_texts, rhythm_texts, lengths, clip_model, device, idx=None):
+    def forward(self, captions, spatial_texts, body_texts, rhythm_texts, lengths, clip_model, device, music=None, idx=None):
         """
-        Main forward pass that performs retrieval and feature processing
+        Main forward pass that performs separate retrieval for each modality
+        Returns retrieved motions for each modality separately
         """
-        B = len(captions)
-        all_indices = []
+        B = len(spatial_texts)
         
-        # Retrieve for each caption in the batch
+        # Retrieve separately for each text modality
+        spatial_indices = []
+        body_indices = []
+        rhythm_indices = []
+        
         for b_idx in range(B):
             length = int(lengths[b_idx])
-            batch_indices = self.retrieve(captions[b_idx], spatial_texts[b_idx], body_texts[b_idx], rhythm_texts[b_idx], length, clip_model, device)
-            all_indices.extend(batch_indices)
+            
+            # Spatial retrieval
+            spatial_batch_indices = self.retrieve_by_single_text(
+                spatial_texts[b_idx], 
+                "spatial",
+                length, 
+                clip_model, 
+                device
+            )
+            spatial_indices.extend(spatial_batch_indices)
+            
+            # Body retrieval
+            body_batch_indices = self.retrieve_by_single_text(
+                body_texts[b_idx],
+                "body", 
+                length,
+                clip_model,
+                device
+            )
+            body_indices.extend(body_batch_indices)
+            
+            # Rhythm retrieval
+            rhythm_batch_indices = self.retrieve_by_single_text(
+                rhythm_texts[b_idx],
+                "rhythm",
+                length,
+                clip_model,
+                device
+            )
+            rhythm_indices.extend(rhythm_batch_indices)
         
-        all_indices = np.array(all_indices)
+        # Retrieve based on music if provided
+        music_indices = []
+        if music is not None:
+            for b_idx in range(B):
+                length = int(lengths[b_idx])
+                # Extract music features for this sample
+                batch_music = music[b_idx]  # Shape: (T, music_dim)
+                batch_indices = self.retrieve_by_music(
+                    batch_music,
+                    length,
+                    device
+                )
+                music_indices.extend(batch_indices)
         
-        # Process retrieved motions
-        re_motion = self.process_retrieved_motions(all_indices, device)
-        re_motion = re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        # Process retrieved motions for each modality
+        spatial_re_motion, spatial_motion_lengths = self.process_retrieved_motions(spatial_indices, device)
+        spatial_re_motion = spatial_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
         
-        # Process retrieved texts  
-        # re_text = self.process_retrieved_texts(all_indices, device)
-        # re_text = re_text.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
-
-        # Process retrieved texts (now returns 3 types)
-        re_spatial, re_body, re_rhythm = self.process_retrieved_texts(all_indices, device)
-        re_spatial = re_spatial.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
-        re_body = re_body.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
-        re_rhythm = re_rhythm.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
-
-        # Process retrieved music
-        re_music = self.process_retrieved_music(all_indices, device)
-        re_music = re_music.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        body_re_motion, body_motion_lengths = self.process_retrieved_motions(body_indices, device)
+        body_re_motion = body_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
         
-        # Create proper masks for retrieved sequences (accounting for padding)
-        re_mask = torch.ones(B, self.num_retrieval, re_motion.shape[2], device=device)
+        rhythm_re_motion, rhythm_motion_lengths = self.process_retrieved_motions(rhythm_indices, device)
+        rhythm_re_motion = rhythm_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
         
-        # Create proper masks based on actual motion lengths
-        for b_idx in range(B):
-            for r_idx in range(self.num_retrieval):
-                global_idx = b_idx * self.num_retrieval + r_idx
-                actual_length = self.motion_lengths[all_indices[global_idx]]
-                # Apply stride to actual length
-                actual_length_strided = (actual_length + self.stride - 1) // self.stride
-                # Mask out padded positions
-                if actual_length_strided < re_motion.shape[2]:
-                    re_mask[b_idx, r_idx, actual_length_strided:] = 0
+        if music_indices:
+            music_re_motion, music_motion_lengths = self.process_retrieved_motions(music_indices, device)
+            music_re_motion = music_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        else:
+            music_re_motion = torch.zeros_like(spatial_re_motion)
+            music_motion_lengths = [0] * (B * self.num_retrieval)
         
+        # Create masks for each modality's retrieved sequences
+        def create_mask_for_modality(indices, motion_lengths, B):
+            mask = torch.ones(B, self.num_retrieval, spatial_re_motion.shape[2], device=device)
+            for b_idx in range(B):
+                for r_idx in range(self.num_retrieval):
+                    global_idx = b_idx * self.num_retrieval + r_idx
+                    actual_length = motion_lengths[global_idx]
+                    actual_length_strided = (actual_length + self.stride - 1) // self.stride
+                    if actual_length_strided < mask.shape[2]:
+                        mask[b_idx, r_idx, actual_length_strided:] = 0
+            return mask
+        
+        spatial_mask = create_mask_for_modality(spatial_indices, spatial_motion_lengths, B)
+        body_mask = create_mask_for_modality(body_indices, body_motion_lengths, B)
+        rhythm_mask = create_mask_for_modality(rhythm_indices, rhythm_motion_lengths, B)
+        music_mask = create_mask_for_modality(music_indices, music_motion_lengths, B) if music_indices else torch.ones_like(spatial_mask)
+        
+        # Return separate retrieved motions for each modality
         re_dict = {
-            # 're_text': re_text,
-            're_spatial': re_spatial,
-            're_body': re_body,
-            're_rhythm': re_rhythm,
-            're_motion': re_motion,
-            're_music': re_music,
-            're_mask': re_mask
+            're_spatial': spatial_re_motion,     # (B, num_retrieval, T, latent_dim)
+            're_body': body_re_motion,           # (B, num_retrieval, T, latent_dim)
+            're_rhythm': rhythm_re_motion,       # (B, num_retrieval, T, latent_dim)
+            're_music': music_re_motion,         # (B, num_retrieval, T, latent_dim)
+            're_spatial_mask': spatial_mask,     # (B, num_retrieval, T)
+            're_body_mask': body_mask,           # (B, num_retrieval, T)
+            're_rhythm_mask': rhythm_mask,       # (B, num_retrieval, T)
+            're_music_mask': music_mask,         # (B, num_retrieval, T)
+            # Keep legacy keys for backward compatibility during transition
+            're_motion': spatial_re_motion,      # Default to spatial for now
+            're_mask': spatial_mask,             # Default to spatial for now
         }
         
         return re_dict
