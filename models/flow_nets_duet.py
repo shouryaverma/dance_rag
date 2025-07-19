@@ -134,7 +134,20 @@ class FlowNet_Duet(nn.Module):
                 retr_mask = retr_cond_active.view(B, 1, 1, 1)  # Shape for broadcasting
                 for key in ['re_motion', 're_spatial', 're_body', 're_rhythm', 're_music']:
                     if key in re_dict:
-                        re_dict[key] = re_dict[key] * retr_mask
+                        # CHECK IF RETRIEVAL TENSOR IS NOT EMPTY BEFORE APPLYING MASK
+                        if re_dict[key].size(0) > 0 and re_dict[key].size(0) == B:
+                            re_dict[key] = re_dict[key] * retr_mask
+                        elif re_dict[key].size(0) == 0:
+                            # Skip masking for empty tensors
+                            continue
+                        else:
+                            # Handle size mismatch - create a mask with the correct size
+                            actual_batch_size = re_dict[key].size(0)
+                            if actual_batch_size > 0:
+                                # Extract the appropriate portion of the mask
+                                adjusted_mask = retr_mask[:actual_batch_size] if actual_batch_size <= B else retr_mask
+                                if adjusted_mask.size(0) == actual_batch_size:
+                                    re_dict[key] = re_dict[key] * adjusted_mask
 
         # Handle disabled conditioning
         if not self.use_text or cond is None:
@@ -393,16 +406,21 @@ class FlowMatching_Duet(nn.Module):
                         replicated_re_dict = {}
                         for re_key, re_value in value.items():
                             if torch.is_tensor(re_value):
-                                if re_value.shape[0] == current_batch_size:
+                                # CHECK IF TENSOR IS NOT EMPTY BEFORE REPLICATING
+                                if re_value.size(0) > 0 and re_value.shape[0] == current_batch_size:
                                     # Replicate first dimension 4x
                                     replicated_re_dict[re_key] = re_value.repeat(4, *([1] * (re_value.dim() - 1)))
                                 else:
-                                    replicated_re_dict[re_key] = re_value
+                                    # For empty or mismatched tensors, create properly sized dummy tensors
+                                    if re_value.size(0) == 0:
+                                        # Create dummy tensor with correct replicated batch size
+                                        dummy_shape = (4 * current_batch_size,) + re_value.shape[1:]
+                                        replicated_re_dict[re_key] = torch.zeros(dummy_shape, dtype=re_value.dtype, device=re_value.device)
+                                    else:
+                                        replicated_re_dict[re_key] = re_value
                             else:
                                 replicated_re_dict[re_key] = re_value
                         kwargs_rep[key] = replicated_re_dict
-                    else:
-                        kwargs_rep[key] = value
                 
                 # Add conditioning type
                 kwargs_rep['cond_type'] = all_cond_types
@@ -450,7 +468,7 @@ class FlowMatching_Duet(nn.Module):
 class RetrievalDatabase_Duet(nn.Module):
     def __init__(self, 
                 num_retrieval=4,
-                topk=10, 
+                topk=10,
                 retrieval_file="/home/verma198/Public/dualflow/dance/data/data.npz",
                 latent_dim=512,
                 max_seq_len=240,
@@ -622,6 +640,12 @@ class RetrievalDatabase_Duet(nn.Module):
     
     def process_retrieved_motions(self, indices, device):
         """Process retrieved motions through motion encoder"""
+
+        if not indices:
+            # Return dummy data if no indices retrieved
+            dummy_motion = torch.zeros(1, 1, self.latent_dim).to(device)
+            return dummy_motion, [1]
+        
         # Combine lead and follow motions
         retrieved_motions = []
         motion_lengths = []
@@ -670,6 +694,22 @@ class RetrievalDatabase_Duet(nn.Module):
         Returns retrieved motions for each modality separately
         """
         B = len(spatial_texts)
+        
+        # ADD THIS CHECK AT THE BEGINNING:
+        if B == 0:
+            # Return empty dict if no batch
+            return {
+                're_spatial': torch.zeros(0, self.num_retrieval, 1, self.latent_dim).to(device),
+                're_body': torch.zeros(0, self.num_retrieval, 1, self.latent_dim).to(device),
+                're_rhythm': torch.zeros(0, self.num_retrieval, 1, self.latent_dim).to(device),
+                're_music': torch.zeros(0, self.num_retrieval, 1, self.latent_dim).to(device),
+                're_spatial_mask': torch.zeros(0, self.num_retrieval, 1).to(device),
+                're_body_mask': torch.zeros(0, self.num_retrieval, 1).to(device),
+                're_rhythm_mask': torch.zeros(0, self.num_retrieval, 1).to(device),
+                're_music_mask': torch.zeros(0, self.num_retrieval, 1).to(device),
+                're_motion': torch.zeros(0, self.num_retrieval, 1, self.latent_dim).to(device),
+                're_mask': torch.zeros(0, self.num_retrieval, 1).to(device),
+            }
         
         # Retrieve separately for each text modality
         spatial_indices = []
@@ -725,17 +765,33 @@ class RetrievalDatabase_Duet(nn.Module):
         
         # Process retrieved motions for each modality
         spatial_re_motion, spatial_motion_lengths = self.process_retrieved_motions(spatial_indices, device)
-        spatial_re_motion = spatial_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        # MODIFY THIS LINE TO HANDLE EMPTY CASES:
+        if len(spatial_indices) > 0:
+            spatial_re_motion = spatial_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        else:
+            spatial_re_motion = torch.zeros(B, self.num_retrieval, 1, self.latent_dim).to(device)
         
         body_re_motion, body_motion_lengths = self.process_retrieved_motions(body_indices, device)
-        body_re_motion = body_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        # MODIFY THIS LINE TO HANDLE EMPTY CASES:
+        if len(body_indices) > 0:
+            body_re_motion = body_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        else:
+            body_re_motion = torch.zeros(B, self.num_retrieval, 1, self.latent_dim).to(device)
         
         rhythm_re_motion, rhythm_motion_lengths = self.process_retrieved_motions(rhythm_indices, device)
-        rhythm_re_motion = rhythm_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        # MODIFY THIS LINE TO HANDLE EMPTY CASES:
+        if len(rhythm_indices) > 0:
+            rhythm_re_motion = rhythm_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+        else:
+            rhythm_re_motion = torch.zeros(B, self.num_retrieval, 1, self.latent_dim).to(device)
         
         if music_indices:
             music_re_motion, music_motion_lengths = self.process_retrieved_motions(music_indices, device)
-            music_re_motion = music_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+            # MODIFY THIS LINE TO HANDLE EMPTY CASES:
+            if len(music_indices) > 0:
+                music_re_motion = music_re_motion.view(B, self.num_retrieval, -1, self.latent_dim).contiguous()
+            else:
+                music_re_motion = torch.zeros(B, self.num_retrieval, 1, self.latent_dim).to(device)
         else:
             music_re_motion = torch.zeros_like(spatial_re_motion)
             music_motion_lengths = [0] * (B * self.num_retrieval)
@@ -743,13 +799,17 @@ class RetrievalDatabase_Duet(nn.Module):
         # Create masks for each modality's retrieved sequences
         def create_mask_for_modality(indices, motion_lengths, B):
             mask = torch.ones(B, self.num_retrieval, spatial_re_motion.shape[2], device=device)
+            # HANDLE EMPTY INDICES CASE:
+            if len(indices) == 0:
+                return mask
             for b_idx in range(B):
                 for r_idx in range(self.num_retrieval):
                     global_idx = b_idx * self.num_retrieval + r_idx
-                    actual_length = motion_lengths[global_idx]
-                    actual_length_strided = (actual_length + self.stride - 1) // self.stride
-                    if actual_length_strided < mask.shape[2]:
-                        mask[b_idx, r_idx, actual_length_strided:] = 0
+                    if global_idx < len(motion_lengths):  # ADD BOUNDS CHECK
+                        actual_length = motion_lengths[global_idx]
+                        actual_length_strided = (actual_length + self.stride - 1) // self.stride
+                        if actual_length_strided < mask.shape[2]:
+                            mask[b_idx, r_idx, actual_length_strided:] = 0
             return mask
         
         spatial_mask = create_mask_for_modality(spatial_indices, spatial_motion_lengths, B)

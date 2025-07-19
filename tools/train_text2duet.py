@@ -12,6 +12,8 @@ from models import *
 from pathlib import Path
 from utils import paramUtil
 import torch
+import os
+import time
 
 os.environ['PL_TORCH_DISTRIBUTED_BACKEND'] = 'nccl'
 from lightning.pytorch.strategies import DDPStrategy
@@ -47,26 +49,6 @@ class LitTrainModel(pl.LightningModule):
     def configure_optimizers(self):
         return self._configure_optim()
 
-    # def plot_motion_intergen(self, motion1, motion2, length, result_root, caption, mode = 'train', motion = 'recon', idx = 0):
-    #     # only plot in the main process
-    #     if self.device.index != 0:
-    #         return
-    #     assert motion in ['gen', 'gt', 'recon'], motion
-    #     assert mode in ['train', 'val'], mode
-    #     motion1 = motion1.cpu().numpy()[:length]
-    #     motion2 = motion2.cpu().numpy()[:length]
-    #     mp_data = [motion1, motion2]
-    #     mp_joint = []
-    #     for i, data in enumerate(mp_data):
-    #         if i == 0:
-    #             joint = data[:,:22*3].reshape(-1,22,3)
-    #         else:
-    #             joint = data[:,:22*3].reshape(-1,22,3)
-    #         mp_joint.append(joint)
-
-    #     result_path = Path(result_root) / f"{mode}_{self.current_epoch}_{idx}_{motion}.mp4"
-    #     plot_3d_motion(str(result_path), paramUtil.t2m_kinematic_chain, mp_joint, title=caption, fps=30)
-
     def plot_motion_intergen(self, gt_motion1, gt_motion2, gen_motion1, gen_motion2, length, result_root, caption, mode='train', idx=0):
         # only plot in the main process
         if self.trainer.global_rank != 0:
@@ -87,13 +69,21 @@ class LitTrainModel(pl.LightningModule):
         result_path = Path(result_root) / f"{mode}_{self.current_epoch}_{idx}_combined.mp4"
         plot_3d_motion(str(result_path), paramUtil.t2m_kinematic_chain, mp_joint, title=caption, fps=30)
     
-    def text_length_to_motion_torch(self, text, music, length):
+    def text_length_to_motion_torch(self, text, music, length,  spatial=None, body_move=None, rhythm=None):
         # text: 1,*
         # length: 1,
         input_batch = {}
         input_batch["text"] = text
         input_batch["music"] = music
         input_batch["motion_lens"] = length
+
+        if spatial is not None:
+            input_batch["spatial"] = spatial
+        if body_move is not None:
+            input_batch["body_move"] = body_move
+        if rhythm is not None:
+            input_batch["rhythm"] = rhythm
+
         # For ReactModel, we need the lead dancer's motion from the test batch
         if self.model_cfg.NAME == "ReactModel":
             # During inference, we'll use ground truth leader motion from the test batch
@@ -107,52 +97,23 @@ class LitTrainModel(pl.LightningModule):
         motions_output = output_batch["output"].reshape(output_batch["output"].shape[0], output_batch["output"].shape[1], 2, -1)
         motions_output = self.normalizerTorch.backward(motions_output.detach())
         return motions_output[:,:,0], motions_output[:,:,1]
-    
-    # def sample_text(self, batch_data, batch_idx, mode):
-    #     motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
-    #         batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
-        
-    #     if self.model_cfg.NAME == "DuetModel":
-    #         # Duet dancing: generate both dancer motions simultaneously
-    #         motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
-            
-    #         # Visualize ground truth
-    #         self.plot_motion_intergen(motion1[0], motion2[0], 
-    #                         motion_lens[0], self.vis_dir, text[0],
-    #                         mode=mode, motion='gt', idx=batch_idx)
-            
-    #         # Visualize generated motions
-    #         self.plot_motion_intergen(motion_gen_1[0], motion_gen_2[0], 
-    #                         motion_lens[0], self.vis_dir, text[0],
-    #                         mode=mode, motion='gen', idx=batch_idx)
-        
-    #     elif self.model_cfg.NAME == "ReactModel":
-    #         # Reactive dancing: use ground truth leader (motion1) and generate follower (motion2)
-            
-    #         # Store lead motion temporarily for the text_length_to_motion_torch function
-    #         self._temp_lead_motion = motion1[0:1]
-            
-    #         # Generate only the follower's motion
-    #         _, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
-            
-    #         # Visualize ground truth
-    #         self.plot_motion_intergen(motion1[0], motion2[0], 
-    #                         motion_lens[0], self.vis_dir, text[0],
-    #                         mode=mode, motion='gt', idx=batch_idx)
-            
-    #         # Visualize leader (ground truth) with generated follower
-    #         self.plot_motion_intergen(motion1[0], motion_gen_follower[0], 
-    #                         motion_lens[0], self.vis_dir, text[0],
-    #                         mode=mode, motion='gen', idx=batch_idx)
 
     def sample_text(self, batch_data, batch_idx, mode):
         motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
             batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
         
+        spatial = batch_data.get('spatial', None)
+        body_move = batch_data.get('body_move', None)
+        rhythm = batch_data.get('rhythm', None)
+
         if self.model_cfg.NAME == "DuetModel":
             # Generate both dancer motions
-            motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
-            
+            motion_gen_1, motion_gen_2 = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1],
+                spatial=spatial[0:1] if spatial is not None else None,
+                body_move=body_move[0:1] if body_move is not None else None,
+                rhythm=rhythm[0:1] if rhythm is not None else None
+            )
+
             # Plot both ground truth and generated in one visualization
             self.plot_motion_intergen(
                 motion1[0], motion2[0],          # Ground truth motions
@@ -167,8 +128,12 @@ class LitTrainModel(pl.LightningModule):
             self._temp_follower_motion = motion2[0:1]
             
             # Generate follower motion
-            motion_gen_lead, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1])
-            
+            motion_gen_lead, motion_gen_follower = self.text_length_to_motion_torch(text[0:1], music[0:1], motion_lens[0:1],
+                spatial=spatial[0:1] if spatial is not None else None,
+                body_move=body_move[0:1] if body_move is not None else None,
+                rhythm=rhythm[0:1] if rhythm is not None else None
+            )
+
             # Plot both ground truth and generated in one visualization
             # For ReactModel, lead is the same for both GT and generated
             self.plot_motion_intergen(
@@ -181,6 +146,11 @@ class LitTrainModel(pl.LightningModule):
     def forward(self, batch_data):
         motion1, motion2, music, text, motion_lens = batch_data['motion1'], \
             batch_data['motion2'], batch_data['music'], batch_data['text'], batch_data['length']
+        
+        spatial = batch_data.get('spatial', None)
+        body_move = batch_data.get('body_move', None)
+        rhythm = batch_data.get('rhythm', None)
+
         motion1 = motion1.detach().float()  # .to(self.device)
         motion2 = motion2.detach().float()  # .to(self.device)
         motions = torch.cat([motion1, motion2], dim=-1)
@@ -189,6 +159,9 @@ class LitTrainModel(pl.LightningModule):
 
         batch = OrderedDict({})
         batch["text"] = text
+        batch["spatial"] = spatial
+        batch["body_move"] = body_move
+        batch["rhythm"] = rhythm
         batch["music"] = music
         batch["motions"] = motions.reshape(B, T, -1).type(torch.float32)
         batch["motion_lens"] = motion_lens.long()
@@ -208,7 +181,6 @@ class LitTrainModel(pl.LightningModule):
         self.it = self.cfg.TRAIN.LAST_ITER if self.cfg.TRAIN.LAST_ITER else 0
         self.epoch = self.cfg.TRAIN.LAST_EPOCH if self.cfg.TRAIN.LAST_EPOCH else 0
         self.logs = OrderedDict()
-
 
     def training_step(self, batch, batch_idx):
         loss, loss_logs = self.forward(batch)
@@ -253,19 +225,9 @@ class LitTrainModel(pl.LightningModule):
                                lr=self.trainer.optimizers[0].param_groups[0]['lr'])
 
     def on_train_epoch_end(self):
-        # pass
         sch = self.lr_schedulers()
         if sch is not None:
             sch.step()
-
-    def save(self, file_name):
-        state = {}
-        try:
-            state['model'] = self.model.module.state_dict()
-        except:
-            state['model'] = self.model.state_dict()
-        torch.save(state, file_name, _use_new_zipfile_serialization=False)
-        return
 
 def build_models(cfg):
     if cfg.NAME == "DuetModel":
@@ -275,6 +237,47 @@ def build_models(cfg):
     else:
         raise NotImplementedError
     return model
+
+def load_checkpoint_weights_only(model, checkpoint_path):
+    """Load only model weights from checkpoint, handling DDP prefixes properly"""
+    try:
+        ckpt = torch.load(checkpoint_path, map_location="cpu")
+        
+        # Extract state dict from various checkpoint formats
+        if "model" in ckpt:
+            state_dict = ckpt["model"]
+        elif "state_dict" in ckpt:
+            state_dict = ckpt["state_dict"]
+        else:
+            state_dict = ckpt
+        
+        # Handle DDP prefixes - remove 'model.' prefix if present
+        cleaned_state_dict = {}
+        for k, v in state_dict.items():
+            # Remove various possible prefixes
+            key = k
+            if key.startswith("model.model."):
+                key = key[12:]  # Remove "model.model."
+            elif key.startswith("model."):
+                key = key[6:]   # Remove "model."
+            elif key.startswith("module."):
+                key = key[7:]   # Remove "module."
+            cleaned_state_dict[key] = v
+        
+        # Load with strict=False to handle any missing/extra keys
+        missing_keys, unexpected_keys = model.load_state_dict(cleaned_state_dict, strict=False)
+        
+        if missing_keys:
+            print(f"Missing keys when loading checkpoint: {missing_keys}")
+        if unexpected_keys:
+            print(f"Unexpected keys when loading checkpoint: {unexpected_keys}")
+            
+        print(f"Successfully loaded model weights from {checkpoint_path}")
+        return True
+        
+    except Exception as e:
+        print(f"Failed to load checkpoint {checkpoint_path}: {e}")
+        return False
 
 import argparse
 if __name__ == '__main__':
@@ -293,58 +296,66 @@ if __name__ == '__main__':
     datamodule = DataModule(data_cfg, val_data_cfg, None, train_cfg.TRAIN.BATCH_SIZE, train_cfg.TRAIN.NUM_WORKERS)
     model = build_models(model_cfg)
 
+    # Handle manual checkpoint loading for weights-only resume
     if train_cfg.TRAIN.RESUME:
-        ckpt = torch.load(train_cfg.TRAIN.RESUME, map_location="cpu")
-        for k in list(ckpt["state_dict"].keys()):
-            if "model" in k:
-                ckpt["state_dict"][k.replace("model.", "")] = ckpt["state_dict"].pop(k)
-        model.load_state_dict(ckpt["state_dict"], strict=True)
-        print("checkpoint state loaded!")
+        print(f"Loading model weights from: {train_cfg.TRAIN.RESUME}")
+        load_checkpoint_weights_only(model, train_cfg.TRAIN.RESUME)
 
-    # Count total parameters
+    # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
-
-    # Count trainable parameters
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
     print(f"Total parameters: {total_params}")
     print(f"Trainable parameters: {trainable_params}")
 
     litmodel = LitTrainModel(model, train_cfg, model_cfg)
 
+    # Setup proper DDP strategy
+    if torch.cuda.device_count() > 1:
+        strategy = DDPStrategy(
+            find_unused_parameters=False,  # Set to True only if needed
+            gradient_as_bucket_view=True,  # Memory optimization
+        )
+        devices = torch.cuda.device_count()
+    else:
+        strategy = "auto"
+        devices = 1
+
+    # Lightning checkpoint callback - handles full checkpoint saving/loading
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=litmodel.model_dir,
-        filename="epoch_{epoch:04d}",  # Add proper filename pattern
+        filename="epoch_{epoch:04d}",
         every_n_epochs=train_cfg.TRAIN.SAVE_EPOCH,
-        save_top_k=-1,  # Keep all checkpoints
-        save_last=True  # Save a 'last.ckpt' file
+        save_top_k=-1,
+        save_last=True,
+        save_on_train_epoch_end=True
     )
-    
-    class CustomCheckpointCallback(pl.callbacks.Callback):
-        def on_train_epoch_end(self, trainer, pl_module):
-            # Only save on the specified interval
-            if (trainer.current_epoch + 1) % trainer.check_val_every_n_epoch == 0:
-                # Use your custom save method
-                checkpoint_path = pjoin(pl_module.model_dir, f"model={model_cfg.NAME}-epoch={trainer.current_epoch}-step={pl_module.it}.ckpt")
-                pl_module.save(checkpoint_path)
-                print(f"Custom checkpoint saved at {checkpoint_path}")
     
     trainer = pl.Trainer(
         default_root_dir=litmodel.model_dir,
-        # devices="auto",
-        devices=8,
+        devices=devices,
         accelerator='gpu',
         max_epochs=train_cfg.TRAIN.EPOCH,
-        strategy=DDPStrategy(find_unused_parameters=True),
-        # strategy="auto",
+        strategy=strategy,
         precision=32,
-        callbacks=[checkpoint_callback, CustomCheckpointCallback()],
-        check_val_every_n_epoch = train_cfg.TRAIN.SAVE_EPOCH,
-        num_sanity_val_steps=1 # 1
+        callbacks=[checkpoint_callback],
+        check_val_every_n_epoch=train_cfg.TRAIN.SAVE_EPOCH,
+        num_sanity_val_steps=1,
+        enable_progress_bar=True,
+        log_every_n_steps=train_cfg.TRAIN.LOG_STEPS
     )
-    ckpt_model = litmodel.model_dir + "/last.ckpt"
-    if os.path.exists(ckpt_model):
-        print('resume from checkpoint')
-        trainer.fit(model=litmodel, datamodule=datamodule, ckpt_path=ckpt_model)
+    
+    # Check for Lightning checkpoint to resume from
+    lightning_ckpt = pjoin(litmodel.model_dir, "last.ckpt")
+    resume_ckpt = lightning_ckpt if os.path.exists(lightning_ckpt) else None
+    
+    if resume_ckpt:
+        print(f'Resuming training from Lightning checkpoint: {resume_ckpt}')
+        try:
+            trainer.fit(model=litmodel, datamodule=datamodule, ckpt_path=resume_ckpt)
+        except Exception as e:
+            print(f"Failed to resume from Lightning checkpoint: {e}")
+            print("Starting fresh training")
+            trainer.fit(model=litmodel, datamodule=datamodule)
     else:
+        print("Starting fresh training")
         trainer.fit(model=litmodel, datamodule=datamodule)

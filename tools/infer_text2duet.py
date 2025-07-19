@@ -190,21 +190,30 @@ if __name__ == '__main__':
     model = build_models(model_cfg)
 
     if model_cfg.CHECKPOINT:
-        ckpt = torch.load(model_cfg.CHECKPOINT, map_location="cpu")
-        # FIX: Handle different checkpoint formats
-        if "state_dict" in ckpt:
-            # Handle case where checkpoint has 'state_dict' key
-            for k in list(ckpt["state_dict"].keys()):
-                if "model" in k:
-                    ckpt["state_dict"][k.replace("model.", "")] = ckpt["state_dict"].pop(k)
-            model.load_state_dict(ckpt["state_dict"], strict=False)
-        elif "model" in ckpt:
-            # Handle case where checkpoint has 'model' key
-            model.load_state_dict(ckpt["model"], strict=False)
-        else:
-            # Handle case where checkpoint is already a state_dict
-            model.load_state_dict(ckpt, strict=False)
-        print("checkpoint state loaded!")
+        checkpoint_path = model_cfg.CHECKPOINT
+        print(f"Loading checkpoint from: {checkpoint_path}")
+        
+        try:
+            ckpt = torch.load(checkpoint_path, map_location="cpu")
+            
+            # Handle different checkpoint formats
+            if "model" in ckpt:
+                model.load_state_dict(ckpt["model"], strict=False)
+            elif "state_dict" in ckpt:
+                # Remove 'model.' prefix if present
+                state_dict = {}
+                for k, v in ckpt["state_dict"].items():
+                    key = k.replace("model.", "") if k.startswith("model.") else k
+                    state_dict[key] = v
+                model.load_state_dict(state_dict, strict=False)
+            else:
+                model.load_state_dict(ckpt, strict=False)
+            
+            print("Checkpoint loaded successfully!")
+            
+        except Exception as e:
+            print(f"Failed to load checkpoint: {e}")
+            raise RuntimeError(f"Cannot proceed without model weights: {e}")
 
     litmodel = LitGenModel(model, train_cfg).to(torch.device("cuda:0"))
     

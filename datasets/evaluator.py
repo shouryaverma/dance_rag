@@ -56,13 +56,15 @@ class EvaluationDataset(Dataset):
                     
                     # Handle dictionary format (Text2Duet)
                     if is_dict_dataset or isinstance(data, dict):
-                        #print(f"Processing dictionary batch {i} with keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
-                        
                         if isinstance(data, dict):
                             motion1, motion2 = data['motion1'], data['motion2']
                             text, motion_lens = data['text'], data['length']
                             music = data.get('music', None)
                             fname = data.get('fname', ["unknown"])
+                            # ADD THESE LINES:
+                            spatial = data.get('spatial', None)
+                            body_move = data.get('body_move', None) 
+                            rhythm = data.get('rhythm', None)
                         else:
                             # Dictionary was wrapped in a list by DataLoader
                             batch_dict = data[0] if isinstance(data, list) else data
@@ -70,6 +72,10 @@ class EvaluationDataset(Dataset):
                             text, motion_lens = batch_dict['text'], batch_dict['length']
                             music = batch_dict.get('music', None)
                             fname = batch_dict.get('fname', ["unknown"])
+                            # ADD THESE LINES:
+                            spatial = batch_dict.get('spatial', None)
+                            body_move = batch_dict.get('body_move', None)
+                            rhythm = batch_dict.get('rhythm', None)
                         
                         if i in mm_idxs:
                             batch["text"] = [text[0]] * mm_num_repeats
@@ -93,6 +99,14 @@ class EvaluationDataset(Dataset):
                             batch["text"] = [text[0]]
                         
                         batch["motion_lens"] = motion_lens
+
+                        # ADD THESE LINES:
+                        if spatial is not None:
+                            batch["spatial"] = [spatial[0]] * mm_num_repeats if i in mm_idxs else [spatial[0]]
+                        if body_move is not None:
+                            batch["body_move"] = [body_move[0]] * mm_num_repeats if i in mm_idxs else [body_move[0]]
+                        if rhythm is not None:
+                            batch["rhythm"] = [rhythm[0]] * mm_num_repeats if i in mm_idxs else [rhythm[0]]
                     
                     # print(f"Batch prepared with text: {batch['text'][0][:30]}...")
                     
@@ -198,10 +212,10 @@ class MMGeneratedDataset(Dataset):
 def get_dataset_motion_loader(opt, batch_size):
     opt = copy.deepcopy(opt)
     # Handle different dataset types
-    if opt.NAME == 'interhuman':
-        print('Loading dataset %s ...' % opt.NAME)
-        dataset = InterHumanDataset(opt)
-    elif opt.NAME == 'duet':
+    # if opt.NAME == 'interhuman':
+    #     print('Loading dataset %s ...' % opt.NAME)
+    #     dataset = InterHumanDataset(opt)
+    if opt.NAME == 'duet':
         print('Loading dataset %s ...' % opt.NAME)
         # Ensure proper configuration for Text2Duet
         try:
@@ -246,7 +260,7 @@ def build_models(cfg):
     model = InterCLIP(cfg)
 
     # Load checkpoint mdd interclip
-    checkpoint = torch.load("/home/verma198/Public/results/epoch=599-step=16800.ckpt", map_location="cpu")
+    checkpoint = torch.load("/home/verma198/epoch=599-step=16800.ckpt", map_location="cpu")
     # Load checkpoint interhuman interclip
     # checkpoint = torch.load("/home/verma198/epoch=4049-step=712800.ckpt", map_location="cpu")
     for k in list(checkpoint["state_dict"].keys()):
